@@ -1,31 +1,35 @@
+''' This script confirms ECG and EOG are cleared by visual inspection, 
+    if this step is done, you can make further processing.
+'''
 import mne
 import numpy as np
 from mne.preprocessing import ICA, read_ica
 from jumeg.jumeg_preprocessing import get_ics_cardiac, get_ics_ocular
 from jumeg.jumeg_plot import plot_performance_artifact_rejection
 
-#path_data = '/home/jdammers/sciebo/Documents/MEG/Verwaltung/Personal/Students/PhD/2013-2016_Dong-Qunxi/Manuscript_Chrono-Analysis/2016_2-Methods/SCoT-debug/data/109077_ica/'
-subjects_dir = '/home/uais/data/Chrono/18subjects/CAU/'
-subject = '201394'
+
+subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
+subject = '203288'
 path_data = subjects_dir + '%s/MEG/' %subject
+
 # -------------------------------------------------------
 # read continuous unfiltered raw data and apply filter
 # -------------------------------------------------------
 import glob
-fn_raw = path_data +'%s_audi_cued,nr,ocarta-raw.fif' %subject
+fn_raw = glob.glob(path_data + '*,nr,ocarta-raw.fif')[0]
 #fn_raw = path_data + '109077_Chrono01_110518_1415_1_c,rfDC,nr,ocarta-raw.fif'
 raw_orig = mne.io.read_raw_fif(fn_raw, preload=True)
+
+raw_orig.plot(start=0,duration=120)# Bad channels inspection
 raw = raw_orig.copy()  # kepp a copy of the original data 
-#raw.plot(start=0,duration=120)
+
+
 # Note, bad channels should be exclude -  which I did NOT do here 
 picks_meg = mne.pick_types(raw.info, meg=True, exclude='bads')
 #raw.plot(start=0,duration=120, n_channels=40)
 
 # apply filter before ICA decomposition
 raw.filter(1, 25, n_jobs=2, method='fft')
-
-
-
 # -------------------------------------------------------
 # apply ICA decomposition
 # -------------------------------------------------------
@@ -48,20 +52,16 @@ idx_eog2 = get_ics_ocular(raw, ica, flow=1, fhigh=10,
         name_eog_ver='EOG 002',score_func='pearsonr', thresh=0.25)
 
 # check what we have in idx_ecg and idx_eog
-
-
-
 # -------------------------------------------------------
 # now do visual inspection of ICA components
 # -------------------------------------------------------
 sources = ica.get_sources(raw, add_channels=['EOG 002','ECG 001','EOG 001'])
 sources.plot(n_channels=25, duration=120,scalings=dict(misc=3, eog=4e-4, ecg=1e-3))
 
-# put here all the component indices for removal
-# for this data I also rejected IC41 (EOG artifact) by visual inspection
-#ica.exclude = list(ica.exclude) + list([ 6, 12, 13, 35, 40, 59])
-#exclude = np.unique(list(idx_ecg) + list(idx_eog1) + list(idx_eog2))
-ica.exclude = list(np.unique(list(idx_ecg) + list(idx_eog1) + list(idx_eog2) + list([51])))
+
+''' The noisy indices should minus 1 before type them into the excluding list.
+'''
+ica.exclude = list(np.unique(list(idx_ecg) + list(idx_eog1) + list(idx_eog2) + list([])))
 
 
 # -------------------------------------------------------
@@ -70,7 +70,6 @@ ica.exclude = list(np.unique(list(idx_ecg) + list(idx_eog1) + list(idx_eog2) + l
 raw_new = ica.apply(raw_orig.copy(), exclude=ica.exclude, n_pca_components=0.99)
 # check your new raw cleaned data, and reject bad channels by visual inspection
 #raw_new.plot(start=0,duration=120)
-
 # -------------------------------------------------------
 # save ICA object and plot ICA rejection performance
 # -------------------------------------------------------

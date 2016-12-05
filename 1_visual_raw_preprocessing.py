@@ -7,17 +7,30 @@ from jumeg.jumeg_noise_reducer import noise_reducer, plot_denoising
 from jumeg.decompose import ocarta
 from jumeg import jumeg_plot
 import os, glob
-subjects_dir = '/home/uais/data/Chrono/18subjects/CAU/'
+
+###########################
+# Set your data path here
+#--------------------------
+subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
 MIN_path = subjects_dir + 'fsaverage'
+
+###########################
+# Set the parameters
+#--------------------------
+do_pre = False # data preprocessing
+do_fil = True # data filtering
+do_epo = True # Crop data into epochs
 res_name, tri_name = 'STI 013', 'STI 014'
-subjects_dir = os.environ['SUBJECTS_DIR']
+
 ###################################
 # Raw data preprocessing
 #----------------------------------
 
-do_pre = True
+
 if do_pre:
     fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*rfDC-raw.fif')
+    #import pdb
+    #pdb.set_trace()
     ##for i in [0, 2, 7, 10]:
     for fn_raw in fn_list:
         #import noise_reducer and plot_power_spectrum function
@@ -38,11 +51,24 @@ if do_pre:
         ocarta_obj = ocarta.JuMEG_ocarta()
         #fn_ocarta = fn_raw_nr[:fn_raw_nr.rfind('-raw.fif')] + ',ocarta_perf'
         ocarta_obj.fit(fn_raw_nr, flow=1, fhigh=20)
-        fn_raw_cl = fn_raw_nr[:fn_raw_nr.rfind('-raw.fif')] + ',ocarta-raw.fif'
+    
+    
+    
+''' Before data filtering, please make sure ECG and EOG cleared, and refer the script
+    '2_bad_icacheck.py'
+'''
+
+###################################
+# Filter the data
+#----------------------------------
+
+if do_fil:
+    fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*ocarta-raw.fif')
+    for fn_raw_cl in fn_list:
         fn_raw_fil = fn_raw_cl[:fn_raw_cl.rfind('-raw.fif')] + ',fibp1-45-raw.fif'
         apply_filter(fn_raw_cl, flow=1, fhigh=45, order=4, njobs=4)
         jumeg_plot.plot_compare_brain_responses(fn_raw, fn_raw_fil, event_id=ev_id, stim_name='trigger')
-
+        
 ###################################
-# Make evoked data
+# Crop the data
 #----------------------------------
