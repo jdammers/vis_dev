@@ -6,7 +6,7 @@ from jumeg.jumeg_preprocessing import apply_filter
 from jumeg.jumeg_noise_reducer import noise_reducer, plot_denoising
 from jumeg.decompose import ocarta
 from jumeg import jumeg_plot
-import os, glob
+import os, glob, mne
 
 ###########################
 # Set your data path here
@@ -18,6 +18,7 @@ MIN_path = subjects_dir + 'fsaverage'
 # Set the parameters
 #--------------------------
 do_pre = False # data preprocessing
+do_inter = True
 do_fil = True # data filtering
 do_epo = True # Crop data into epochs
 res_name, tri_name = 'STI 013', 'STI 014'
@@ -57,6 +58,19 @@ if do_pre:
     '2_bad_icacheck.py'
 '''
 
+###################################
+# Interpolate bad channels
+#----------------------------------
+if do_inter:
+    fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*,nr,ocarta-raw.fif')
+    for fn_raw_cl in fn_list:
+        raw = mne.io.Raw(fn_raw_cl, preload=True)
+        if raw.info['bads'] != []:
+            print('bad channels are:', raw.info['bads'])
+            raw.interpolate_bads(reset_bads=True)
+            print('bad channels are:', raw.info['bads'])
+            raw.save(fn_raw_cl, overwrite=True)
+        del raw
 ###################################
 # Filter the data
 #----------------------------------
