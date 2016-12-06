@@ -68,6 +68,7 @@ if do_fil:
         apply_filter(fn_raw_cl, flow=1, fhigh=45, order=4, njobs=4)
         jumeg_plot.plot_compare_brain_responses(fn_raw_cl, fn_raw_fil, event_id=ev_id, stim_name='trigger')
         
+        
 ###################################
 # Crop the data
 #----------------------------------

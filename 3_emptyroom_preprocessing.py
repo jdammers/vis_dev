@@ -3,7 +3,7 @@
 '''
 from apply_empty import apply_empty, apply_cov
 import os, glob, shutil
-subjects_dir = '/home/uais/data/Chrono/18subjects/CAU/'
+subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
 # Copy empty raw data into the individual path
 #fn_list = glob.glob('/home/qdong/data/Chrono/18subjects/Empty_room/*')
 #for fn_raw in fn_list:
