@@ -6,7 +6,7 @@ from jumeg.jumeg_preprocessing import apply_filter
 from jumeg.jumeg_noise_reducer import noise_reducer, plot_denoising
 from jumeg.decompose import ocarta
 from jumeg import jumeg_plot
-import os, glob
+import os, glob, mne
 
 ###########################
 # Set your data path here
@@ -18,6 +18,7 @@ MIN_path = subjects_dir + 'fsaverage'
 # Set the parameters
 #--------------------------
 do_pre = False # data preprocessing
+do_inter = True
 do_fil = True # data filtering
 do_epo = True # Crop data into epochs
 res_name, tri_name = 'STI 013', 'STI 014'
@@ -58,6 +59,19 @@ if do_pre:
 '''
 
 ###################################
+# Interpolate bad channels
+#----------------------------------
+if do_inter:
+    fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*,nr,ocarta-raw.fif')
+    for fn_raw_cl in fn_list:
+        raw = mne.io.Raw(fn_raw_cl, preload=True)
+        if raw.info['bads'] != []:
+            print('bad channels are:', raw.info['bads'])
+            raw.interpolate_bads(reset_bads=True)
+            print('bad channels are:', raw.info['bads'])
+            raw.save(fn_raw_cl, overwrite=True)
+        del raw
+###################################
 # Filter the data
 #----------------------------------
 
@@ -67,6 +81,7 @@ if do_fil:
         fn_raw_fil = fn_raw_cl[:fn_raw_cl.rfind('-raw.fif')] + ',fibp1-45-raw.fif'
         apply_filter(fn_raw_cl, flow=1, fhigh=45, order=4, njobs=4)
         jumeg_plot.plot_compare_brain_responses(fn_raw_cl, fn_raw_fil, event_id=ev_id, stim_name='trigger')
+        
         
 ###################################
 # Crop the data
