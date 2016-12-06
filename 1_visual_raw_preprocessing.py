@@ -7,7 +7,9 @@ from jumeg.jumeg_noise_reducer import noise_reducer, plot_denoising
 from jumeg.decompose import ocarta
 from jumeg import jumeg_plot
 import os, glob, mne
-
+from mne.event import define_target_events
+import numpy as np
+from mne.epochs import equalize_epoch_counts
 ###########################
 # Set your data path here
 #--------------------------
@@ -18,8 +20,8 @@ MIN_path = subjects_dir + 'fsaverage'
 # Set the parameters
 #--------------------------
 do_pre = False # data preprocessing
-do_inter = True
-do_fil = True # data filtering
+do_inter = False
+do_fil = False # data filtering
 do_epo = True # Crop data into epochs
 res_name, tri_name = 'STI 013', 'STI 014'
 ev_id = 1
@@ -86,3 +88,63 @@ if do_fil:
 ###################################
 # Crop the data
 #----------------------------------
+if do_epo:
+    conds_id = [(1, 8), (2, 64), (3, 64), (4, 8)]
+    conditions = ['LLst', 'LRst', 'RRst', 'RLst']
+    
+    # Define the raw_data path for epoching
+    fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*,nr,ocarta,fibp1-45-raw.fif')    
+    tstmin, tstmax = 0, 0.8 # The time range for searching response events
+    rstmin, rstmax = -0.8, 0 # The time range for searching trigger events
+    tmin, tmax = -0.3, 0.6 # The time range for trigger epochs
+    rtmin, rtmax = -0.8, 0.1 #
+    
+    for fn_raw in fn_list[1:]:
+        raw = mne.io.read_raw_fif(fn_raw, preload=True)
+        #raw.plot(start=0, duration=120)
+        tri_events = mne.find_events(raw, stim_channel='STI 014')
+        res_events = mne.find_events(raw, stim_channel='STI 013')
+        
+        #Get the events list
+        sfreq = raw.info['sfreq']
+        levents = np.array(list(tri_events) + list(res_events))
+        cons_epochs = []
+        i = 0
+        # Based on the correct event couples and fixed time range, to find the appropriate epochs
+        for cond_id in conds_id:
+            tri_id = cond_id[0]
+            res_id = cond_id[1]
+            picks = mne.pick_types(raw.info, meg='mag', eeg=False, stim=False, eog=False,
+                                    exclude='bads')
+                                    
+            # Take the triger events as the reference events                         
+            events_, lag = define_target_events(levents, tri_id, res_id,
+                                                sfreq, tstmin, tstmax)                        
+            epochs = mne.Epochs(raw, events_, tri_id, tmin,
+                                tmax, picks=picks, baseline=None,
+                                reject=dict(mag=4e-12))
+            #Crope the baseline time range
+            epochs.load_data()
+            epo_base = epochs.copy().crop(None, 0)
+            line_base = epo_base.get_data().mean(axis=-1, keepdims=True)
+            # Baseline corrected for trigger events
+            epochs._data = epochs.get_data() - line_base
+            fn_epo = fn_raw[:fn_raw.rfind('-raw.fif')] + ',evt_%s_bc-epo.fif' %conditions[i]
+            epochs.save(fn_epo)
+            del epochs
+            # Take the response events as the reference events   
+            events_, lag = define_target_events(levents, res_id, tri_id, 
+                                                sfreq, rstmin, rstmax)
+            epochs = mne.Epochs(raw, events_, res_id, rtmin,
+                                rtmax, picks=picks, baseline=None,
+                                reject=dict(mag=4e-12))
+            # Baseline corrected for response events
+            #epochs.load_data()
+            equalize_epoch_counts([epo_base, epochs])
+            line_base = epo_base.get_data().mean(axis=-1, keepdims=True)
+            epochs._data = epochs.get_data() - line_base
+            res_con = conditions[i][:2] + 'rt'
+            fn_epo = fn_raw[:fn_raw.rfind('-raw.fif')] + ',evt_%s_bc-epo.fif' %res_con
+            epochs.save(fn_epo)
+            del epochs
+            i = i + 1

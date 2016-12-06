@@ -24,7 +24,7 @@ def apply_empty(fname_empty_room, require_filter=True):
         path_in, name = os.path.split(fn_in)
         fn_empty_nr = fn_in[:fn_in.rfind(ext_empty_raw)] + ',nr-empty.fif'
         noise_reducer(fn_in, refnotch=50, detrending=False, fnout=fn_empty_nr)
-        #noise_reducer(fn_empty_nr, refnotch=60, detrending=False, fnout=fn_empty_nr)
+        noise_reducer(fn_empty_nr, refnotch=60, detrending=False, fnout=fn_empty_nr)
         noise_reducer(fn_empty_nr, reflp=5, fnout=fn_empty_nr)
         fn_in = fn_empty_nr
         if require_filter:
