@@ -9,7 +9,7 @@ from jumeg.jumeg_plot import plot_performance_artifact_rejection
 
 
 subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
-subject = '201195'
+subject = '203709'
 path_data = subjects_dir + '%s/MEG/' %subject
 
 # -------------------------------------------------------
@@ -20,7 +20,7 @@ fn_raw = glob.glob(path_data + '*rfDC,nr-raw.fif')[0]
 fn_raw_oca = fn_raw[:fn_raw.rfind('-raw.fif')] + ',ocarta-raw.fif'
 #fn_raw = path_data + '109077_Chrono01_110518_1415_1_c,rfDC,nr,ocarta-raw.fif'
 raw_orig = mne.io.read_raw_fif(fn_raw, preload=True)
-raw_orig.plot(start=0,duration=120)# Bad channels inspection
+#raw_orig.plot(start=0,duration=120)# Bad channels inspection
 
 
 raw = raw_orig.copy()  # kepp a copy of the original data 
