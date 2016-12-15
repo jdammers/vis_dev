@@ -35,18 +35,17 @@ def set_directory(path=None):
 subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
 stcs_path = subjects_dir + 'fsaverage/conf_stc/' # the path of STC
 labels_path = stcs_path + 'STC_ROI/' # path where ROIs are saved
-
+fn_src = subjects_dir + '/fsaverage/bem/fsaverage-ico-5-src.fif'
+src = mne.read_source_spaces(fn_src)
 conditions = [('sti', 'LLst'), ('sti', 'RRst'), ('sti', 'RLst'), ('sti', 'LRst'),
               ('res', 'LLrt'), ('res', 'RRrt'), ('res', 'RLrt'), ('res', 'LRrt')]
 #fn_stcdata = stcs_path + 'stcsdata.npy'
 thr = 0 # Threshold of the time span of STC (ms)
 vert_size = 10 # minimum size for ROIs (mm)
 
-do_ROIs = True
+do_ROIs = False
 if do_ROIs:
     reset_directory(labels_path+'ini/')
-    fn_src = subjects_dir + '/fsaverage/bem/fsaverage-ico-5-src.fif'
-    src = mne.read_source_spaces(fn_src)
     for cond in conditions:
         side = cond[0]
         conf_type = cond[1]
@@ -84,7 +83,7 @@ if do_ROIs:
             j = j + 1
 
 # Merge ROIs across conditions
-do_merge = True
+do_merge = False
 if do_merge:
     apply_merge(labels_path)
 
@@ -113,7 +112,16 @@ if do_split:
                                             par_label.vertices))
             if overlapped > 0 and ana_label.hemi == par_label.hemi:  
                 chi_label = ana_label - (ana_label - par_label)
-                chi_label.save(chis_path+ana_label.name)
+                # Only labels larger than vert_size are saved
+                if chi_label.hemi == 'lh':
+                    h = 0
+                else:
+                    h = 1
+                dist = src[h]['dist']
+                label_dist = dist[chi_label.vertices, :][:, chi_label.vertices]
+                max_dist = round(label_dist.max() * 1000)
+                if max_dist > vert_size:
+                    chi_label.save(chis_path+ana_label.name)
                 
 # Merge ROIs with the same anatomical labels.   
 do_merge_ana = True
@@ -141,11 +149,11 @@ if do_merge_ana:
             else:
                 shutil.copy(fn_ana, tar_path)
 
-red_size = True
-if red_size:
-    tar_path = labels_path + 'func/'
-    fn_src = subjects_dir + '/fsaverage/bem/fsaverage-ico-5-src.fif'
-    redu_small(tar_path, vert_size, fn_src)
+#red_size = True
+#if red_size:
+#    tar_path = labels_path + 'func/'
+#    #fn_src = subjects_dir + '/fsaverage/bem/fsaverage-ico-5-src.fif'
+#    redu_small(tar_path, vert_size, fn_src)
     
 do_write_list = True
 if do_write_list:
