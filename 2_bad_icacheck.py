@@ -16,7 +16,8 @@ path_data = subjects_dir + '%s/MEG/' %subject
 # read continuous unfiltered raw data and apply filter
 # -------------------------------------------------------
 import glob
-fn_raw = glob.glob(path_data + '*,nr,ocarta-raw.fif')[0]
+fn_raw = glob.glob(path_data + '*rfDC,nr-raw.fif')[0]
+fn_raw_oca = fn_raw[:fn_raw.rfind('-raw.fif')] + ',ocarta-raw.fif'
 #fn_raw = path_data + '109077_Chrono01_110518_1415_1_c,rfDC,nr,ocarta-raw.fif'
 raw_orig = mne.io.read_raw_fif(fn_raw, preload=True)
 raw_orig.plot(start=0,duration=120)# Bad channels inspection
@@ -85,11 +86,11 @@ plot_performance_artifact_rejection(raw_orig, ica, fn_perf, show=True)
 # save results
 # -------------------------------------------------------
 # maybe you keep a copy of the original OCARTA raw fileimport shutil
-import shutil
-shutil.copy2(fn_raw,fn_raw+'.orig' )
+#import shutil
+#shutil.copy2(fn_raw,fn_raw+'.orig' )
 
 # save/overwrite cleaned data 
-raw_new.save(fn_raw, overwrite=True)
+raw_new.save(fn_raw_oca, overwrite=True)
 
 
 # now create epochs and check for bad epochs

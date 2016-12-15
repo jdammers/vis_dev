@@ -6,7 +6,7 @@ from jumeg.jumeg_preprocessing import apply_filter
 from jumeg.jumeg_noise_reducer import noise_reducer, plot_denoising
 from jumeg.decompose import ocarta
 from jumeg import jumeg_plot
-import os, glob, mne
+import glob, mne
 from mne.event import define_target_events
 import numpy as np
 from mne.epochs import equalize_epoch_counts
@@ -22,7 +22,10 @@ MIN_path = subjects_dir + 'fsaverage'
 do_pre = False # data preprocessing
 do_inter = False
 do_fil = False # data filtering
-do_epo = True # Crop data into epochs
+do_epo = False # Crop data into epochs
+avg_fil_epos = False # average filtered epos
+
+
 res_name, tri_name = 'STI 013', 'STI 014'
 ev_id = 1
 ###################################
@@ -32,27 +35,18 @@ ev_id = 1
 
 if do_pre:
     fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*rfDC-raw.fif')
-    #import pdb
-    #pdb.set_trace()
-    ##for i in [0, 2, 7, 10]:
     for fn_raw in fn_list:
         #import noise_reducer and plot_power_spectrum function
         #apply noise reducer for 50 Hz (and harmonics)
         fn_raw_nr = fn_raw[:fn_raw.rfind('-raw.fif')] + ',nr-raw.fif'
         noise_reducer(fn_raw, refnotch=50, detrending=False, fnout=fn_raw_nr) 
-        #noise_reducer(fn_raw_nr, refnotch=60, detrending=False, fnout=fn_raw_nr)
+        noise_reducer(fn_raw_nr, refnotch=60, detrending=False, fnout=fn_raw_nr)
         #apply noise reducer for frequencies below 5 Hz
         noise_reducer(fn_raw_nr, reflp=5, fnout=fn_raw_nr)# plot power spectrum
         fn_power_spect = fn_raw_nr[:fn_raw_nr.rfind('-raw.fif')] + ',denoising'
         plot_denoising([fn_raw, fn_raw_nr], stim_name=tri_name,
                     event_id=ev_id, show=False, fnout=fn_power_spect,
                     tmin_stim=-0.4, tmax_stim=0.4)
-        # import ocarta module
-    
-        # apply OCARTA
-        ocarta_obj = ocarta.JuMEG_ocarta()
-        #fn_ocarta = fn_raw_nr[:fn_raw_nr.rfind('-raw.fif')] + ',ocarta_perf'
-        ocarta_obj.fit(fn_raw_nr, flow=1, fhigh=20)
     
     
     
@@ -91,15 +85,14 @@ if do_fil:
 if do_epo:
     conds_id = [(1, 8), (2, 64), (3, 64), (4, 8)]
     conditions = ['LLst', 'LRst', 'RRst', 'RLst']
-    
     # Define the raw_data path for epoching
-    fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*,nr,ocarta,fibp1-45-raw.fif')    
-    tstmin, tstmax = 0, 0.8 # The time range for searching response events
-    rstmin, rstmax = -0.8, 0 # The time range for searching trigger events
+    fn_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*,nr,ocarta,fibp1-45-raw.fif')   
+    tstmin, tstmax = 0.1, 0.8 # The time range for searching response events
+    rstmin, rstmax = -0.8, -0.1 # The time range for searching trigger events
     tmin, tmax = -0.3, 0.6 # The time range for trigger epochs
     rtmin, rtmax = -0.8, 0.1 #
     
-    for fn_raw in fn_list[1:]:
+    for fn_raw in fn_list:
         raw = mne.io.read_raw_fif(fn_raw, preload=True)
         #raw.plot(start=0, duration=120)
         tri_events = mne.find_events(raw, stim_channel='STI 014')
@@ -148,3 +141,29 @@ if do_epo:
             epochs.save(fn_epo)
             del epochs
             i = i + 1
+
+###################################
+# Bad epochs visual inspection
+#----------------------------------
+''' Check the bad epochs of each subject
+'''
+#fn_epos = glob.glob(subjects_dir + '/203867/MEG/*,evt_*_bc-epo.fif')
+#fn_epo = fn_epos[0]
+##fn_ave = fn_epo[:fn_epo.rfind('-epo.fif')] + '-ave.fif' 
+#epo = mne.read_epochs(fn_epo, preload=True)
+#epo.plot(block=True, n_epochs=40)
+#epo.save(fn_epo)
+
+###################################
+# Average filtered epos
+#----------------------------------
+
+if avg_fil_epos:
+    fn_epos = glob.glob(subjects_dir + '/*[0-9]/MEG/*,evt_*_bc-epo.fif')
+    for fn_epo in fn_epos:
+        fn_ave = fn_epo[:fn_epo.rfind('-epo.fif')] + '-ave.fif'
+        epo = mne.read_epochs(fn_epo)
+        evo = epo.average()
+        evo.save(fn_ave)
+
+
