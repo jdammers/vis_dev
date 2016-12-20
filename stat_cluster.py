@@ -149,6 +149,43 @@ def morph_STC(fn_stc, grade, subjects_dir, template='fsaverage', event='LLst',
                           ftype='stc')
 
 
+def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax, 
+                  out_path, subjects_dir=None):
+    '''Arange the comparison matrices between trigger events and response events
+    '''
+    tri_stcs = []
+    for tri_evt in tri_list:
+        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % tri_evt)
+        for fn_stc1 in fn_stc_list1:
+            stc1 = mne.read_source_estimate(fn_stc1, subject='fsaverage')
+            stc1.crop(trtmin, trtmax)
+            tri_stcs.append(stc1.data)
+    tri_stcs = np.array(tri_stcs).transpose(0,2,1)
+    # tmin = stc1.tmin
+    tstep = stc1.tstep
+    tri_stcs = np.abs(tri_stcs)  # only magnitude
+    np.savez(out_path + 'tri.npz', tri=tri_stcs, tstep=tstep)
+    del stc1
+
+    res_stcs = []
+    for res_evt in res_list:
+        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % res_evt)
+        for fn_stc2 in fn_stc_list2:
+            stc2 = mne.read_source_estimate(fn_stc2, subject='fsaverage')
+            stc2.crop(restmin, restmax)
+            res_stcs.append(stc2.data)
+    res_stcs = np.array(res_stcs).transpose(0,2,1)
+    del stc2
+    #X = [tri_stcs[:, :, :], res_stcs[:, :, :]]
+    
+    # save data matrix
+    #X = np.array(X).transpose(1, 2, 3, 0)
+    res_stcs = np.abs(res_stcs)  # only magnitude
+    res_stcs = res_stcs[:, :-1, :]
+    np.savez(out_path + 'res.npz', res=res_stcs, tstep=tstep)
+    X = [tri_stcs, res_stcs]
+    return tstep, X
+    
 def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
               template='fsaverage', subjects_dir=None):
 
