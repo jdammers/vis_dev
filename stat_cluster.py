@@ -147,7 +147,63 @@ def morph_STC(fn_stc, grade, subjects_dir, template='fsaverage', event='LLst',
             stc_base = stc_morph.crop(btmin, btmax)
             stc_base.save(stc_path + '/%s_%s_baseline' % (subject, event[:2]),
                           ftype='stc')
+                          
+def _mv_ave(X, window, overlap, freqs=678.17):
+    '''
+      Resample the data on the time dimension.
 
+      Parameter
+      ---------
+      X: array
+        The shape of X should be (cases, subjects, timepoints, vertices)
+      window: int
+        The window size for moving average
+      overlap: int
+        The overlap for the moving average
+      freqs: float or int
+        The sampling rate
+    '''
+    mv_wind = window * 0.001
+    step_wind = (window - overlap) * 0.001
+    st_point = 0
+    win_id = int(mv_wind * freqs)
+    ste_id = int(step_wind * freqs)
+    N_X = []
+    while win_id < X.shape[2]:
+        N_X.append(X[:, :, st_point:win_id, :].mean(axis=2))
+        win_id = win_id + ste_id
+        st_point = st_point + ste_id
+    #N_X = np.array(N_X).transpose(1, 0, 2, 3)
+    N_X = np.array(N_X).transpose(1, 2, 0, 3)
+    return N_X
+#    
+#def _mv_ave(X, window, overlap, freqs=678.17):
+#    '''
+#      Resample the data on the time dimension.
+#
+#      Parameter
+#      ---------
+#      X: array
+#        The shape of X should be (Vertices, timepoints, subjects, cases)
+#      window: int
+#        The window size for moving average
+#      overlap: int
+#        The overlap for the moving average
+#      freqs: float or int
+#        The sampling rate
+#    '''
+#    mv_wind = window * 0.001
+#    step_wind = (window - overlap) * 0.001
+#    st_point = 0
+#    win_id = int(mv_wind * freqs)
+#    ste_id = int(step_wind * freqs)
+#    N_X = []
+#    while win_id < X.shape[1]:
+#        N_X.append(X[:, st_point:win_id, :, :].mean(axis=1))
+#        win_id = win_id + ste_id
+#        st_point = st_point + ste_id
+#    N_X = np.array(N_X).transpose(1, 0, 2, 3)
+#    return N_X
 
 def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax, 
                   out_path, subjects_dir=None):
@@ -155,7 +211,7 @@ def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax,
     '''
     tri_stcs = []
     for tri_evt in tri_list:
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % tri_evt)
+        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % tri_evt)
         for fn_stc1 in fn_stc_list1:
             stc1 = mne.read_source_estimate(fn_stc1, subject='fsaverage')
             stc1.crop(trtmin, trtmax)
@@ -164,12 +220,12 @@ def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax,
     # tmin = stc1.tmin
     tstep = stc1.tstep
     tri_stcs = np.abs(tri_stcs)  # only magnitude
-    np.savez(out_path + 'tri.npz', tri=tri_stcs, tstep=tstep)
+    
     del stc1
 
     res_stcs = []
     for res_evt in res_list:
-        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % res_evt)
+        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % res_evt)
         for fn_stc2 in fn_stc_list2:
             stc2 = mne.read_source_estimate(fn_stc2, subject='fsaverage')
             stc2.crop(restmin, restmax)
@@ -177,14 +233,26 @@ def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax,
     res_stcs = np.array(res_stcs).transpose(0,2,1)
     del stc2
     #X = [tri_stcs[:, :, :], res_stcs[:, :, :]]
-    
+    bs_stcs = []
+    for res_evt in res_list:
+        fn_stc_list3 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*[0-9]_%s_baseline-lh.stc' % res_evt[:2])
+        for fn_stc3 in fn_stc_list3:
+            stc3 = mne.read_source_estimate(fn_stc3, subject='fsaverage')
+            bs_stcs.append(stc3.data)
+    bs_stcs = np.array(bs_stcs).transpose(0,2,1)
+    del stc3
     # save data matrix
-    #X = np.array(X).transpose(1, 2, 3, 0)
     res_stcs = np.abs(res_stcs)  # only magnitude
-    res_stcs = res_stcs[:, :-1, :]
+    bs_stcs = np.abs(bs_stcs)
+    #res_stcs = res_stcs[:, :-1, :]
+    tmin = min([tri_stcs.shape[1], res_stcs.shape[1], bs_stcs.shape[1]])
+    
+    tri_stcs = tri_stcs[:, :tmin, :]
+    res_stcs = res_stcs[:, :tmin, :]
+    bs_stcs = bs_stcs[:, :tmin, :]
     np.savez(out_path + 'res.npz', res=res_stcs, tstep=tstep)
-    X = [tri_stcs, res_stcs]
-    return tstep, X
+    np.savez(out_path + 'tri.npz', tri=tri_stcs, tstep=tstep)
+    np.savez(out_path + 'bs.npz', bs=bs_stcs, tstep=tstep)
     
 def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
               template='fsaverage', subjects_dir=None):
@@ -208,7 +276,7 @@ def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
     '''
     con_stcs = []
     for evt in evt_list[:2]:
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % evt)
+        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
         for fn_stc1 in fn_stc_list1[:n_subjects]:
             stc1 = mne.read_source_estimate(fn_stc1, subject=template)
             stc1.crop(tmin, tmax)
@@ -222,7 +290,7 @@ def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
 
     incon_stcs = []
     for evt in evt_list[2:]:
-        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % evt)
+        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
         for fn_stc2 in fn_stc_list2[:n_subjects]:
             stc2 = mne.read_source_estimate(fn_stc2, subject=template)
             stc2.crop(tmin, tmax)
@@ -240,7 +308,7 @@ def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
     return tstep, fsave_vertices, X
 
 
-def Ara_contr_base(evt_list, tmin, tmax, conf_type, out_path, n_subjects=13,
+def Ara_contr_base(evt_list, tmin, tmax, out_path, n_subjects=13,
                    template='fsaverage', subjects_dir=None):
 
     ''' Prepare arrays for the data contrasts of prestimulus and post-stimulus.
@@ -262,8 +330,8 @@ def Ara_contr_base(evt_list, tmin, tmax, conf_type, out_path, n_subjects=13,
     for evt in evt_list:
         stcs = []
         bs_stcs = []
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % evt)
-        for fn_stc1 in fn_stc_list1[:n_subjects]:
+        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
+        for fn_stc1 in fn_stc_list1:
             # fn_stc2 = fn_stc1.split(evt)[0] + evt[:2] +  fn_stc1.split(evt)[1]
             name = os.path.basename(fn_stc1)
             fn_path = os.path.split(fn_stc1)[0]
@@ -274,55 +342,40 @@ def Ara_contr_base(evt_list, tmin, tmax, conf_type, out_path, n_subjects=13,
             stcs.append(stc1.data)
             stc2 = mne.read_source_estimate(fn_stc2, subject=template)
             bs_stcs.append(stc2.data)
-        stcs = np.array(stcs).transpose(1, 2, 0)
-        bs_stcs = np.array(bs_stcs).transpose(1, 2, 0)
+            
+        stcs = np.array(stcs).transpose(0,2,1)
+        bs_stcs = np.array(bs_stcs).transpose(0,2,1)
         # tmin = stc1.tmin
         tstep = stc1.tstep
         fsave_vertices = stc1.vertices
-        if stcs.shape[1] > bs_stcs.shape[1]:
-            X = [stcs[:, :bs_stcs.shape[1], :], bs_stcs[:, :, :]]
-        else:
-            X = [stcs[:, :, :], bs_stcs[:, :stcs.shape[1], :]]
+        ctime = min([stcs.shape[1], bs_stcs.shape[1]])
+        X = [stcs[:, :ctime, :], bs_stcs[:, :ctime, :]]
         del stcs, bs_stcs
         # save data matrix
-        X = np.array(X).transpose(1, 2, 3, 0)
+        X = np.array(X)
         X = np.abs(X)  # only magnitude
-        np.savez(out_path + '%s_%s.npz' % (conf_type, evt), X=X, tstep=tstep,
+        np.savez(out_path + '2sample_%s.npz' % (evt), X=X, tstep=tstep,
+                 fsave_vertices=fsave_vertices)
+        X = X[0] - X[1]
+        np.savez(out_path + '1sample_%s.npz' % (evt), X=X, tstep=tstep,
                  fsave_vertices=fsave_vertices)
         del X
     # return tstep, fsave_vertices, X
 
-
-def mv_ave(X, window, overlap, freqs=678.17):
-    '''
-      Resample the data on the time dimension.
-
-      Parameter
-      ---------
-      X: array
-        The shape of X should be (Vertices, timepoints, subjects, cases)
-      window: int
-        The window size for moving average
-      overlap: int
-        The overlap for the moving average
-      freqs: float or int
-        The sampling rate
-    '''
-    mv_wind = window * 0.001
-    step_wind = (window - overlap) * 0.001
-    st_point = 0
-    win_id = int(mv_wind * freqs)
-    ste_id = int(step_wind * freqs)
-    N_X = []
-    while win_id < X.shape[1]:
-        N_X.append(X[:, st_point:win_id, :, :].mean(axis=1))
-        win_id = win_id + ste_id
-        st_point = st_point + ste_id
-    N_X = np.array(N_X).transpose(1, 0, 2, 3)
-    return N_X
+def _exclu_vers():    
+    fn_lmedial = '/home/uais_common/dong/freesurfer/subjects/fsaverage/label/lh.Medial_wall.label'
+    lh_medial = mne.read_label(fn_lmedial)
+    lh_mvers = lh_medial.get_vertices_used()
+    fn_rmedial = '/home/uais_common/dong/freesurfer/subjects/fsaverage/label/rh.Medial_wall.label'
+    rh_medial = mne.read_label(fn_rmedial)
+    rh_mvers = rh_medial.get_vertices_used()
+    rh_mvers = rh_mvers + 10242
+    del_vers = list(lh_mvers) + list(rh_mvers)
+    return del_vers
 
 
-def stat_clus(X, tstep, n_per=8192, p_threshold=0.01, p=0.05, fn_clu_out=None):
+
+def stat_clus(X, tstep, n_per=8192, p_threshold=0.01, p=0.05, fn_clu_out=None, del_vers=_exclu_vers()):
     '''
       Calculate significant clusters using 1sample ttest.
 
@@ -347,7 +400,6 @@ def stat_clus(X, tstep, n_per=8192, p_threshold=0.01, p=0.05, fn_clu_out=None):
 
     #    Note that X needs to be a multi-dimensional array of shape
     #    samples (subjects) x time x space, so we permute dimensions
-    X = np.transpose(X, [2, 1, 0])
     n_subjects = X.shape[0]
     fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
 
@@ -358,7 +410,7 @@ def stat_clus(X, tstep, n_per=8192, p_threshold=0.01, p=0.05, fn_clu_out=None):
     T_obs, clusters, cluster_p_values, H0 = clu = \
         spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
                                            n_jobs=1, threshold=t_threshold,
-                                           n_permutations=n_per)
+                                           n_permutations=n_per, spatial_exclude=del_vers)
 
     #    Now select the clusters that are sig. at p < 0.05 (note that this value
     #    is multiple-comparisons corrected).
@@ -372,7 +424,7 @@ def stat_clus(X, tstep, n_per=8192, p_threshold=0.01, p=0.05, fn_clu_out=None):
 
 
 
-def per2test(X1, X2, p_thr, p, tstep, n_per=8192, fn_clu_out=None):
+def per2test(X, p_thr, p, tstep, n_per=8192, fn_clu_out=None, del_vers=_exclu_vers()):
     '''
       Calculate significant clusters using 2 sample ftest.
 
@@ -393,17 +445,12 @@ def per2test(X1, X2, p_thr, p, tstep, n_per=8192, fn_clu_out=None):
     '''
     #    Note that X needs to be a multi-dimensional array of shape
     #    samples (subjects) x time x space, so we permute dimensions
-    n_subjects1 = X1.shape[2]
-    n_subjects2 = X2.shape[2]
-    fsave_vertices = [np.arange(X1.shape[0]/2), np.arange(X1.shape[0]/2)]
-    X1 = np.transpose(X1, [2, 1, 0])
-    X2 = np.transpose(X2, [2, 1, 0])
-    X = [X1, X2]
-
+    fsave_vertices = [np.arange(X[0].shape[-1]/2), np.arange(X[0].shape[-1]/2)]
+    n_subjects = X[0].shape[0]
     #    Now let's actually do the clustering. This can take a long time...
     #    Here we set the threshold quite high to reduce computation.
-    f_threshold = stats.distributions.f.ppf(1. - p_thr / 2., n_subjects1 - 1,
-                                            n_subjects2 - 1)
+    f_threshold = stats.distributions.f.ppf(1. - p_thr / 2., n_subjects - 1,
+                                            n_subjects - 1)
     # t_threshold = stats.distributions.t.ppf(1. - p_thr / 2., n_subjects1 - 1,
     #                                         n_subjects2 - 1)
 
@@ -413,7 +460,7 @@ def per2test(X1, X2, p_thr, p, tstep, n_per=8192, fn_clu_out=None):
         spatio_temporal_cluster_test(X, n_permutations=n_per, #step_down_p=0.001,
                                      connectivity=connectivity, n_jobs=1,
                                      # threshold=t_threshold, stat_fun=stats.ttest_ind)
-                                     threshold=f_threshold)
+                                     threshold=f_threshold, spatial_exclude=del_vers)
 
     #    Now select the clusters that are sig. at p < 0.05 (note that this value
     #    is multiple-comparisons corrected).
@@ -439,7 +486,7 @@ def clu2STC(fn_cluster, p_thre=0.05, tstep=None):
         tstep: float
             The interval between timepoints.
     '''
-    fn_stc_out = fn_cluster[:fn_cluster.rfind('.npz')] + ',temp_%.3f' % (p_thre)
+    fn_stc_out = fn_cluster[:fn_cluster.rfind('.npz')] + ',pthre_%.3f' % (p_thre)
     npz = np.load(fn_cluster)
     if tstep is None:
         tstep = npz['tstep'].flatten()[0]
@@ -449,6 +496,4 @@ def clu2STC(fn_cluster, p_thre=0.05, tstep=None):
                                                  vertices=fsave_vertices,
                                                  subject='fsaverage')
 
-    if fn_stc_out is None:
-        return stc_all_cluster_vis
     stc_all_cluster_vis.save(fn_stc_out)
