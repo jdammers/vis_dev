@@ -13,7 +13,7 @@ do_inver_ave = False # make STC
 do_morph_STC = False # Morph individual STC
 do_group_STC = False # Group morphed STC into pre and post-stimuls (events)
 do_t_test = True # Spatial clustering
-do_2sample = True #2 sample test
+do_2sample = False #2 sample test
 do_clu2STC = True # Transfer cluster arrays into STC objects.
 
 # Set the option for stimulus or response
@@ -129,7 +129,7 @@ if do_t_test:
         print ''
         fn_clu_out = stcs_path + '%d_pthr%.4f_%s.npz' %(permutation, p_th, evt)
         stat_clus(X, tstep, n_per=permutation, p_threshold=p_th, p=p_v,
-                fn_clu_out=fn_clu_out)
+                fn_clu_out=fn_clu_out,del_vers=None)
         del X
     print '>>> FINISHED with the clusters generation.'
     print ''
@@ -152,7 +152,7 @@ if do_2sample:
         X = npz['X']
         fn_clu_out = stcs_path + '%d_pthr%.4f_%s.npz' % (permutation/2, p_th, evt)
         per2test(X, p_thr=p_th, p=p_v, tstep=tstep, n_per=permutation/2,
-                fn_clu_out=fn_clu_out)
+                fn_clu_out=fn_clu_out, del_vers=None)
         del X
         clu2STC(fn_clu_out, p_thre=p_v, tstep=0.01)
     print '>>> FINISHED with the clusters generation.'
@@ -164,11 +164,11 @@ if do_clu2STC:
     import os.path as op
     for evt in evt_list:
         evt1 = '1sample_%s' %(evt)
-        fn_cluster1 = stcs_path + '%d_pthr%.4f_%s.npz' %(permutation, p_th, evt)
+        fn_cluster1 = stcs_path + '%d_pthr%.4f_%s.npz' %(permutation, p_th, evt1)
         if op.isfile(fn_cluster1):
             clu2STC(fn_cluster1, p_thre=p_v)
         evt2 = '2sample_%s' %(evt)
-        fn_cluster2 = stcs_path + '%d_pthr%.4f_%s.npz' % (permutation/2, p_th, evt)
+        fn_cluster2 = stcs_path + '%d_pthr%.4f_%s.npz' % (permutation/2, p_th, evt2)
         if op.isfile(fn_cluster2):
             clu2STC(fn_cluster2, p_thre=p_v)
         

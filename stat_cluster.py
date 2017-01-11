@@ -74,14 +74,14 @@ def apply_inverse_ave(fnevo, subjects_dir):
         write_inverse_operator(fn_inv, inv)
 
 
-def apply_STC_ave(fnevo, method='dSPM', snr=3.0):
+def apply_STC_ave(fnevo, method='MNE', snr=3.0):
     ''' Inverse evoked data into the source space.
         Parameter
         ---------
         fnevo: string or list
             The evoked file with ECG, EOG and environmental noise free.
         method:string
-            Inverse method, 'MNE' or 'dSPM'
+            Inverse method, 'MNE' or 'MNE'
         snr: float
             Signal to noise ratio for inverse solution.
     '''
@@ -136,7 +136,7 @@ def morph_STC(fn_stc, grade, subjects_dir, template='fsaverage', event='LLst',
         stc_name = name[:name.rfind('-lh.stc')]
         min_dir = subjects_dir + '/%s' % template
         # this path used for ROI definition
-        stc_path = min_dir + '/dSPM_ROIs/%s' % (subject)
+        stc_path = min_dir + '/MNE_ROIs/%s' % (subject)
         # fn_cov = meg_path + '/%s_empty,fibp1-45,nr-cov.fif' % subject
         set_directory(stc_path)
         # Morph STC
@@ -211,7 +211,7 @@ def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax,
     '''
     tri_stcs = []
     for tri_evt in tri_list:
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % tri_evt)
+        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/MNE_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % tri_evt)
         for fn_stc1 in fn_stc_list1:
             stc1 = mne.read_source_estimate(fn_stc1, subject='fsaverage')
             stc1.crop(trtmin, trtmax)
@@ -225,7 +225,7 @@ def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax,
 
     res_stcs = []
     for res_evt in res_list:
-        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % res_evt)
+        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/MNE_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % res_evt)
         for fn_stc2 in fn_stc_list2:
             stc2 = mne.read_source_estimate(fn_stc2, subject='fsaverage')
             stc2.crop(restmin, restmax)
@@ -235,7 +235,7 @@ def ara_trivsres(tri_list, res_list, trtmin, trtmax, restmin, restmax,
     #X = [tri_stcs[:, :, :], res_stcs[:, :, :]]
     bs_stcs = []
     for res_evt in res_list:
-        fn_stc_list3 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*[0-9]_%s_baseline-lh.stc' % res_evt[:2])
+        fn_stc_list3 = glob.glob(subjects_dir + '/fsaverage/MNE_ROIs/*[0-9]/*[0-9]_%s_baseline-lh.stc' % res_evt[:2])
         for fn_stc3 in fn_stc_list3:
             stc3 = mne.read_source_estimate(fn_stc3, subject='fsaverage')
             bs_stcs.append(stc3.data)
@@ -276,7 +276,7 @@ def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
     '''
     con_stcs = []
     for evt in evt_list[:2]:
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
+        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/MNE_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
         for fn_stc1 in fn_stc_list1[:n_subjects]:
             stc1 = mne.read_source_estimate(fn_stc1, subject=template)
             stc1.crop(tmin, tmax)
@@ -290,7 +290,7 @@ def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
 
     incon_stcs = []
     for evt in evt_list[2:]:
-        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
+        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/MNE_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
         for fn_stc2 in fn_stc_list2[:n_subjects]:
             stc2 = mne.read_source_estimate(fn_stc2, subject=template)
             stc2.crop(tmin, tmax)
@@ -330,7 +330,7 @@ def Ara_contr_base(evt_list, tmin, tmax, out_path, n_subjects=13,
     for evt in evt_list:
         stcs = []
         bs_stcs = []
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
+        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/MNE_ROIs/*[0-9]/*evt_%s_bc-lh.stc' % evt)
         for fn_stc1 in fn_stc_list1:
             # fn_stc2 = fn_stc1.split(evt)[0] + evt[:2] +  fn_stc1.split(evt)[1]
             name = os.path.basename(fn_stc1)
