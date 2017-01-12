@@ -199,13 +199,19 @@ def Ara_norm(subjects, ncond, stcs_dir, out_path):
             subject = name.split('_')[0]
             fn_base = path + '/%s_%s_baseline-lh.stc' %(subject, cond[:2])
             base_stc = mne.read_source_estimate(fn_base)
-            #base_data = base_stc.data.flatten()
             base_data = base_stc.data
+            b_mean = base_data.mean()
+            b_std = base_data.std()
+            
+            #z-score pre and post data
+            data = (data - b_mean) / b_std
+            base_data = (base_data - b_mean) / b_std
             A_evt.append(data)
             A_base.append(base_data)
               
         A_evt = np.array(A_evt)
         A_base = np.array(A_base)
+        print cond, np.percentile(np.abs(A_base), 95)
         tstep = stc.tstep
         fsave_vertices = stc.vertices
         ctime = min([A_evt.shape[-1], A_base.shape[-1]])
@@ -213,11 +219,6 @@ def Ara_norm(subjects, ncond, stcs_dir, out_path):
         del A_evt, A_base
         # save data matrix
         X = np.array(X)
-        g_mean = X[1].mean()
-        g_std = X[1].std()
-        print g_mean, g_std, cond
-        X[0] = (X[0] - g_mean) / g_std
-        X[1] = (X[1] - g_mean) / g_std
         X = np.abs(X)  # only magnitude
         X = X.transpose(0,1,3,2)
         np.savez(out_path + 'Group_%s.npz' % (cond), X=X, tstep=tstep,
