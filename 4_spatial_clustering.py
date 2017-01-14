@@ -17,16 +17,18 @@ do_2sample = False #2 sample test
 do_clu2STC = False # Transfer cluster arrays into STC objects.
 ex_medial = False # Take the medial wall vertices into cluster estimation
 #The main path for ROI definition
-subjects_dir = os.environ['SUBJECTS_DIR']
+subjects_dir = os.environ['SUBJECTS_DIR']+'/'
 
 # parameter of Inversing and Morphing
 method = 'dSPM'
+#method = 'MNE'
 snr = 3
-
+n_jobs = 2
 
 # The parameters for clusterring test
 permutation = 8192
-perc = 99.99 # The percentile of baseline STCs distributions
+#permutation = 1000    # testing only
+perc = 99.0 # The percentile of baseline STCs distributions
 p_v = 0.01 # comparisons corrected p-value
 
 ############################################
@@ -96,7 +98,7 @@ if do_t_test:
     else:
         del_vers = None
         
-    sample1_clus(fn_list, n_per=permutation, pct=perc, p=p_v, del_vers=del_vers)
+    sample1_clus(fn_list[4:], n_per=permutation, pct=perc, p=p_v, del_vers=del_vers, n_jobs=n_jobs)
     print '>>> FINISHED with the clusters generation.'
     print ''
 
