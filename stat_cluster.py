@@ -211,7 +211,7 @@ def Ara_norm(subjects, ncond, stcs_dir, out_path):
               
         A_evt = np.array(A_evt)
         A_base = np.array(A_base)
-        print cond, np.percentile(np.abs(A_base), 95)
+        #print cond, np.percentile(np.abs(A_base), 95)
         tstep = stc.tstep
         fsave_vertices = stc.vertices
         ctime = min([A_evt.shape[-1], A_base.shape[-1]])
@@ -226,11 +226,13 @@ def Ara_norm(subjects, ncond, stcs_dir, out_path):
         del X
                     
 
-def _exclu_vers():    
-    fn_lmedial = '/home/uais_common/dong/freesurfer/subjects/fsaverage/label/lh.Medial_wall.label'
+def exclu_vers(subjects_dir):
+    ''' Exclude the vertices of the medial wall.
+    '''    
+    fn_lmedial = subjects_dir + 'fsaverage/label/lh.Medial_wall.label'
     lh_medial = mne.read_label(fn_lmedial)
     lh_mvers = lh_medial.get_vertices_used()
-    fn_rmedial = '/home/uais_common/dong/freesurfer/subjects/fsaverage/label/rh.Medial_wall.label'
+    fn_rmedial = subjects_dir + 'fsaverage/label/rh.Medial_wall.label'
     rh_medial = mne.read_label(fn_rmedial)
     rh_mvers = rh_medial.get_vertices_used()
     rh_mvers = rh_mvers + 10242
@@ -239,7 +241,7 @@ def _exclu_vers():
 
 
 
-def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=_exclu_vers()):
+def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None):
     '''
       Calculate significant clusters using 1sample ttest.
 
@@ -262,7 +264,9 @@ def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=_exclu_vers()):
 
     # Using the percentile of baseline array as the distribution threshold
     for fn_npz in fn_list:
-        fn_out = fn_npz[:fn_npz.rfind('.npz')] + '_1sample_%d_pct%.1f.npz' %(n_per, pct)
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_pct%.2f.npz' %(n_per, pct)
         npz = np.load(fn_npz)
         tstep = npz['tstep'].flatten()[0]
         #    Note that X needs to be a multi-dimensional array of shape
@@ -294,7 +298,7 @@ def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=_exclu_vers()):
 
 
 
-def sample2_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=_exclu_vers()):
+def sample2_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None):
     '''
       Calculate significant clusters using 2 sample ftest.
 
@@ -312,7 +316,9 @@ def sample2_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=_exclu_vers()):
         If is '_exclu_vers', delete the vertices in the medial wall.
     '''
     for fn_npz in fn_list:
-        fn_out = fn_npz[:fn_npz.rfind('.npz')] + '_2sample_%d_pct%.1f.npz' %(n_per, pct)
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_pct%.2f.npz' %(n_per, pct)
         npz = np.load(fn_npz)
         tstep = npz['tstep'].flatten()[0]
         #    Note that X needs to be a multi-dimensional array of shape

@@ -1,4 +1,4 @@
-import glob
+import glob,os
 from stat_cluster import set_directory
 #####################################################
 # Aplly spatio-temporal clustering for ROI defintion
@@ -15,9 +15,9 @@ do_group_STC = False # Group morphed STC into pre and post-stimuls (events)
 do_t_test = True # Spatial clustering
 do_2sample = False #2 sample test
 do_clu2STC = False # Transfer cluster arrays into STC objects.
-
+ex_medial = False # Take the medial wall vertices into cluster estimation
 #The main path for ROI definition
-subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
+subjects_dir = os.environ['SUBJECTS_DIR']
 
 # parameter of Inversing and Morphing
 method = 'dSPM'
@@ -26,8 +26,8 @@ snr = 3
 
 # The parameters for clusterring test
 permutation = 8192
-perc = 99 # The percentile of baseline STCs distributions
-p_v = 0.05 # comparisons corrected p-value
+perc = 99.99 # The percentile of baseline STCs distributions
+p_v = 0.01 # comparisons corrected p-value
 
 ############################################
 # make inverse operator of filtered evoked 
@@ -69,7 +69,7 @@ if do_morph_STC:
 #--------------------------------------------------
 
 #The path for storing the results related with ROIs
-stcs_path = subjects_dir + 'fsaverage/conf_stc/'
+stcs_path = subjects_dir + 'fsaverage/%s_conf_stc/' %method
 set_directory(stcs_path)
 
 if do_group_STC:
@@ -87,10 +87,16 @@ if do_group_STC:
 # Spatial clustering for significant clusters related with events
 #----------------------------------------------------------------
 if do_t_test:
-    print '>>> ttest for clustering ....'
-    from stat_cluster import sample1_clus 
+    print '>>> 1sampletest for clustering ....'
+    from stat_cluster import sample1_clus, exclu_vers 
     fn_list = glob.glob(stcs_path + 'Group_*.npz')
-    sample1_clus(fn_list, n_per=permutation, pct=perc, p=p_v, del_vers=None)
+    #exclude medial wall vertices or not
+    if ex_medial:
+        del_vers = exclu_vers(subjects_dir)
+    else:
+        del_vers = None
+        
+    sample1_clus(fn_list, n_per=permutation, pct=perc, p=p_v, del_vers=del_vers)
     print '>>> FINISHED with the clusters generation.'
     print ''
 
@@ -103,7 +109,13 @@ if do_2sample:
     print '>>> 2smpletest for clustering ....'
     from stat_cluster import sample2_clus 
     fn_list = glob.glob(stcs_path + 'Group_*.npz')
-    sample2_clus(fn_list, n_per=permutation/2, pct=perc, p=p_v, del_vers=None)
+    #exclude medial wall vertices or not
+    if ex_medial:
+        del_vers = exclu_vers(subjects_dir)
+    else:
+        del_vers = None
+        
+    sample2_clus(fn_list, n_per=permutation/2, pct=perc, p=p_v, del_vers=del_vers)
     print '>>> FINISHED with the clusters generation.'
     print ''
     
@@ -113,7 +125,7 @@ if do_2sample:
 if do_clu2STC:
     print '>>> Transfer cluster to STC ....'
     from stat_cluster import clu2STC
-    fn_list = glob.glob(stcs_path + 'Group_*sample*.npz')
+    fn_list = glob.glob(stcs_path + 'clu*_Group_*.npz')
     clu2STC(fn_list, p_thre=p_v)
     
         
