@@ -1,5 +1,6 @@
 import glob,os
 from stat_cluster import set_directory
+from stat_cluster import find_files
 #####################################################
 # Aplly spatio-temporal clustering for ROI defintion
 #####################################################
@@ -13,24 +14,30 @@ do_inver_ave = False # make STC
 do_morph_STC = False # Morph individual STC
 do_group_STC = False # Group morphed STC into pre and post-stimuls (events)
 do_t_test = False # Spatial clustering
-do_2sample = False #2 sample test
-do_clu2STC = True # Transfer cluster arrays into STC objects.
+do_2sample = True #2 sample test
+do_clu2STC = True# Transfer cluster arrays into STC objects.
 ex_medial = False # Take the medial wall vertices into cluster estimation
 #The main path for ROI definition
 subjects_dir = os.environ['SUBJECTS_DIR']+'/'
 
 # parameter of Inversing and Morphing
-method = 'dSPM'
-#method = 'MNE'
+#method = 'dSPM'
+method = 'MNE'
 snr = 3
 n_jobs = 2
 
 # The parameters for clusterring test
-permutation = 8192
-#permutation = 1000    # testing only
-perc = 99.0 # The percentile of baseline STCs distributions
+#permutation = 8192
+mt = 1 #max_step for spatio-temporal clustering
+permutation = 1000    # testing only
+pct = 100 # The percentile of baseline STCs distributions
+pthr = 0.0001 #f-threshold
+if method == 'dSPM':
+    thr = 5.67#Threshold corresponding 0.0001 interval
+elif method == 'MNE':
+    thr = 5.67
 p_v = 0.01 # comparisons corrected p-value
-
+tail = 1 # 0 for two tails test, 1 for 1 tail test.
 ############################################
 # make inverse operator of filtered evoked 
 #------------------------------------------
@@ -49,7 +56,8 @@ if do_make_inve:
 if do_inver_ave:
     print '>>> Calculate STC ....'
     from stat_cluster import apply_STC_ave
-    fn_evt_list = glob.glob(subjects_dir+'*[0-9]/MEG/*bcc,nr,fibp1-45,ar,evt_*_bc-ave.fif')
+    fn_evt_list = find_files(subjects_dir, pattern='*bcc,nr,fibp1-45,ar,evt_*_bc-ave.fif') 
+    #fn_evt_list = glob.glob(subjects_dir+'*[0-9]/MEG/*bcc,nr,fibp1-45,ar,evt_*_bc-ave.fif')
     apply_STC_ave(fn_evt_list, method=method, snr=snr)
     print '>>> FINISHED with STC generation.'
     print ''
@@ -62,6 +70,7 @@ if do_morph_STC:
     print '>>> Calculate morphed STC ....'
     from stat_cluster import morph_STC
     fn_stc_list = glob.glob(subjects_dir+'*[0-9]/MEG/*bcc,nr,fibp1-45,ar,evt_*_bc-lh.stc')
+    fn_stc_list = sorted(fn_stc_list)
     morph_STC(fn_stc_list, method, subjects_dir=subjects_dir)
     print '>>> FINISHED with morphed STC generation.'
     print ''
@@ -90,15 +99,18 @@ if do_group_STC:
 #----------------------------------------------------------------
 if do_t_test:
     print '>>> 1sampletest for clustering ....'
-    from stat_cluster import sample1_clus, exclu_vers 
+    from stat_cluster import sample1_clus, exclu_vers, sample1_clus_thr, sample1_clus_fixed 
     fn_list = glob.glob(stcs_path + 'Group_*.npz')
+    fn_list = sorted(fn_list)
     #exclude medial wall vertices or not
     if ex_medial:
         del_vers = exclu_vers(subjects_dir)
     else:
         del_vers = None
         
-    sample1_clus(fn_list[4:], n_per=permutation, pct=perc, p=p_v, del_vers=del_vers, n_jobs=n_jobs)
+    sample1_clus(fn_list, n_per=permutation, pct=pct, p=p_v, tail=tail, del_vers=del_vers, n_jobs=n_jobs)
+    #sample1_clus_thr(fn_list[:1], n_per=permutation, pthr=pthr, p=p_v, tail=tail, del_vers=del_vers, n_jobs=n_jobs)
+    #sample1_clus_fixed(fn_list, n_per=permutation, thre=thr, p=p_v, tail=tail, max_step=mt, del_vers=del_vers, n_jobs=n_jobs)
     print '>>> FINISHED with the clusters generation.'
     print ''
 
@@ -109,15 +121,17 @@ if do_2sample:
     ''' This comparison is suitable for the samples from different entireties
     '''
     print '>>> 2smpletest for clustering ....'
-    from stat_cluster import sample2_clus 
+    permutation2 = permutation / 2
+    from stat_cluster import sample2_clus, exclu_vers 
     fn_list = glob.glob(stcs_path + 'Group_*.npz')
+    fn_list = sorted(fn_list)
     #exclude medial wall vertices or not
     if ex_medial:
         del_vers = exclu_vers(subjects_dir)
     else:
         del_vers = None
         
-    sample2_clus(fn_list, n_per=permutation/2, pct=perc, p=p_v, del_vers=del_vers)
+    sample2_clus(fn_list, n_per=permutation2, pthr=pthr, p=p_v, del_vers=del_vers, tail=tail)
     print '>>> FINISHED with the clusters generation.'
     print ''
     
@@ -127,7 +141,9 @@ if do_2sample:
 if do_clu2STC:
     print '>>> Transfer cluster to STC ....'
     from stat_cluster import clu2STC
-    fn_list = glob.glob(stcs_path + 'clu*_Group_*.npz')
+    #Here you can modify the path of NPZs including sinificant clusters
+    fn_list = glob.glob(stcs_path + 'clu2sample_Group_*_%d_%dtail_pthr%.4f.npz' %(permutation/2, 1+(tail==0), pthr))
+    fn_list = sorted(fn_list)
     clu2STC(fn_list, p_thre=p_v)
     
         

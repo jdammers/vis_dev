@@ -11,6 +11,7 @@ from mne.stats import (spatio_temporal_cluster_1samp_test,
                        summarize_clusters_stc, spatio_temporal_cluster_test)
 
 from jumeg.jumeg_preprocessing import get_files_from_list
+from scipy import stats as stats
 
 def reset_directory(path=None):
     """
@@ -225,7 +226,6 @@ def Ara_norm(subjects, ncond, stcs_dir, out_path):
                  fsave_vertices=fsave_vertices)
         del X
                     
-
 def exclu_vers(subjects_dir):
     ''' Exclude the vertices of the medial wall.
     '''    
@@ -239,9 +239,7 @@ def exclu_vers(subjects_dir):
     del_vers = list(lh_mvers) + list(rh_mvers)
     return del_vers
 
-
-
-def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None, n_jobs=1, tail=1):
+def sample1_clus_thr(fn_list, n_per=8192, pthr=0.001, p=0.01, tail=1,  del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 1sample ttest.
 
@@ -255,6 +253,9 @@ def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None, n_jobs=1, t
         The percentile of the baseline distribution.
       p: float
         The corrected p_values for comparisons.
+      tail: 1 or 0
+        if tail=1, that is 1 tail test
+        if tail=0, that is 2 tail test 
       del_vers: None or _exclu_vers
         If is '_exclu_vers', delete the vertices in the medial wall.
     '''
@@ -264,25 +265,159 @@ def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None, n_jobs=1, t
 
     # Using the percentile of baseline array as the distribution threshold
     for fn_npz in fn_list:
-        fn_path = os.path.dirname(fn_npz)
-        name = os.path.basename(fn_npz)
-        fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_pct%.2f.npz' %(n_per, pct)
+        
         npz = np.load(fn_npz)
         tstep = npz['tstep'].flatten()[0]
         #    Note that X needs to be a multi-dimensional array of shape
         #    samples (subjects) x time x space, so we permute dimensions
-        #X = npz['X']
-        #t_threshold = np.percentile(X[1], pct)
-        #X = X[0] - X[1]
-        X = np.abs(npz['X'])
-        t_threshold = np.percentile(X[1], pct)
+        X = npz['X']
+        #X_b = X[1]
         X = X[0]
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        n_subjects = X.shape[0]
+        if tail == 1:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.3f.npz' %(n_per, tail, pthr)
+            X = np.abs(X)
+            t_threshold = -stats.distributions.t.ppf(0.01, n_subjects-1)
+        elif tail == 0:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.3f.npz' %(n_per, tail+2, pthr)
+            t_threshold = -stats.distributions.t.ppf(pthr/2, n_subjects-1)
+            
         fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
     
-        #    Now let's actually do the clustering. This can take a long time...
-        #    Here we set the threshold quite high to reduce computation.
         #n_subjects = X.shape[0]
-        #t_threshold = -stats.distributions.t.ppf(p_threshold / 2., n_subjects - 1)
+        #t_threshold = -stats.distributions.t.ppf(0.01/(1+(tail==0)), n_subjects-1)
+
+        print('Clustering.')
+        T_obs, clusters, cluster_p_values, H0 = clu = \
+            spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
+                                            n_jobs=n_jobs, threshold=t_threshold,
+                                            n_permutations=n_per, tail=tail, spatial_exclude=del_vers)
+    
+        #    Now select the clusters that are sig. at p < 0.05 (note that this value
+        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
+    
+        # Save the clusters as stc file
+        np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
+        assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %pthr,\
+                                    maybe you need to reset a lower p_threshold')
+
+def sample1_clus_fixed(fn_list, n_per=8192, thre=5.3, p=0.01, tail=1,  del_vers=None, n_jobs=1, max_step=30):
+    '''
+      Calculate significant clusters using 1sample ttest.
+
+      Parameter
+      ---------
+      fn_list: list
+        Paths of group arrays
+      n_per: int
+        The permutation for ttest.
+      pct: int or float.
+        The percentile of the baseline distribution.
+      p: float
+        The corrected p_values for comparisons.
+      tail: 1 or 0
+        if tail=1, that is 1 tail test
+        if tail=0, that is 2 tail test 
+      del_vers: None or _exclu_vers
+        If is '_exclu_vers', delete the vertices in the medial wall.
+    '''
+
+    print('Computing connectivity.')
+    connectivity = spatial_tris_connectivity(grade_to_tris(5))
+
+    # Using the percentile of baseline array as the distribution threshold
+    for fn_npz in fn_list:
+        
+        npz = np.load(fn_npz)
+        tstep = npz['tstep'].flatten()[0]
+        #    Note that X needs to be a multi-dimensional array of shape
+        #    samples (subjects) x time x space, so we permute dimensions
+        X = npz['X']
+        X = X[0]
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        t_threshold = thre
+        if tail == 1:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_thr%.2f.npz' %(n_per, tail, thre)
+            X = np.abs(X)
+        elif tail == 0:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_thr%.2f.npz' %(n_per, tail+2, thre)
+            
+        fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
+    
+        #n_subjects = X.shape[0]
+        #t_threshold = -stats.distributions.t.ppf(0.01/(1+(tail==0)), n_subjects-1)
+
+        print('Clustering.')
+        T_obs, clusters, cluster_p_values, H0 = clu = \
+            spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
+                                            n_jobs=n_jobs, threshold=t_threshold,
+                                            n_permutations=n_per, tail=tail, max_step=max_step, spatial_exclude=del_vers)
+    
+        #    Now select the clusters that are sig. at p < 0.05 (note that this value
+        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
+    
+        # Save the clusters as stc file
+        np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
+        assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
+                                    maybe you need to reset a lower p_threshold')
+                                    
+def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_jobs=1):
+    '''
+      Calculate significant clusters using 1sample ttest.
+
+      Parameter
+      ---------
+      fn_list: list
+        Paths of group arrays
+      n_per: int
+        The permutation for ttest.
+      pct: int or float.
+        The percentile of the baseline distribution.
+      p: float
+        The corrected p_values for comparisons.
+      tail: 1 or 0
+        if tail=1, that is 1 tail test
+        if tail=0, that is 2 tail test 
+      del_vers: None or _exclu_vers
+        If is '_exclu_vers', delete the vertices in the medial wall.
+    '''
+
+    print('Computing connectivity.')
+    connectivity = spatial_tris_connectivity(grade_to_tris(5))
+
+    # Using the percentile of baseline array as the distribution threshold
+    for fn_npz in fn_list:
+        
+        npz = np.load(fn_npz)
+        tstep = npz['tstep'].flatten()[0]
+        #    Note that X needs to be a multi-dimensional array of shape
+        #    samples (subjects) x time x space, so we permute dimensions
+        X = npz['X']
+        X_b = X[1]
+        X = X[0]
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        
+        if tail == 1:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f.npz' %(n_per, tail, pct)
+            X = np.abs(X)
+            t_threshold = np.percentile(np.abs(X_b), pct)
+        elif tail == 0:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f.npz' %(n_per, tail+2, pct)
+            t_threshold = np.percentile(X_b, pct)
+            
+        fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
+    
+        #n_subjects = X.shape[0]
+        #t_threshold = -stats.distributions.t.ppf(0.01/(1+(tail==0)), n_subjects-1)
+
         print('Clustering.')
         T_obs, clusters, cluster_p_values, H0 = clu = \
             spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
@@ -301,7 +436,7 @@ def sample1_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None, n_jobs=1, t
 
 
 
-def sample2_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None):
+def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 2 sample ftest.
 
@@ -321,21 +456,28 @@ def sample2_clus(fn_list, n_per=8192, pct=95, p=0.05, del_vers=None):
     for fn_npz in fn_list:
         fn_path = os.path.dirname(fn_npz)
         name = os.path.basename(fn_npz)
-        fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_pct%.2f.npz' %(n_per, pct)
+        #fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_pct%.2f.npz' %(n_per, pct)
+        fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.4f.npz' %(n_per, 1+(tail==0), pthr)
         npz = np.load(fn_npz)
         tstep = npz['tstep'].flatten()[0]
         #    Note that X needs to be a multi-dimensional array of shape
         #    samples (subjects) x time x space, so we permute dimensions
         X = npz['X']
-        f_threshold = np.percentile(X[1], pct)
+        ppf = stats.f.ppf
+        tail = 1   # tail = we are interested in an increase of variance only
+        p_thresh = pthr / (1 + (tail == 0))  # we can also adapt this to p=0.01 if the cluster size is too large
+        n_samples_per_group = [len(x) for x in X]
+        f_threshold = ppf(1. - p_thresh, *n_samples_per_group)
+        if np.sign(tail) < 0:
+            f_threshold = -f_threshold
         fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
         print('Clustering...')
         connectivity = spatial_tris_connectivity(grade_to_tris(5))
         T_obs, clusters, cluster_p_values, H0 = clu = \
             spatio_temporal_cluster_test(X, n_permutations=n_per, #step_down_p=0.001,
-                                        connectivity=connectivity, n_jobs=1,
+                                        connectivity=connectivity, n_jobs=n_jobs,
                                         # threshold=t_threshold, stat_fun=stats.ttest_ind)
-                                        threshold=f_threshold, spatial_exclude=del_vers)
+                                        threshold=f_threshold, spatial_exclude=del_vers, tail=tail)
     
         #    Now select the clusters that are sig. at p < 0.05 (note that this value
         #    is multiple-comparisons corrected).
@@ -361,9 +503,11 @@ def clu2STC(fn_list, p_thre=0.05):
         
     '''
     for fn_cluster in fn_list:
-        fn_stc_out = fn_cluster[:fn_cluster.rfind('.npz')] + ',pthre_%.3f' % (p_thre)
+        fn_stc_out = fn_cluster[:fn_cluster.rfind('.npz')] + ',pv_%.3f' % (p_thre)
         npz = np.load(fn_cluster)
         clu = npz['clu']
+        good_cluster_inds = np.where(clu[2] < p_thre)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
         fsave_vertices = list(npz['fsave_vertices'])
         tstep = npz['tstep'].flatten()[0]
         stc_all_cluster_vis = summarize_clusters_stc(clu, p_thre, tstep=tstep,
