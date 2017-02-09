@@ -21,23 +21,23 @@ ex_medial = False # Take the medial wall vertices into cluster estimation
 subjects_dir = os.environ['SUBJECTS_DIR']+'/'
 
 # parameter of Inversing and Morphing
-#method = 'dSPM'
-method = 'MNE'
+method = 'dSPM'
+#method = 'MNE'
 snr = 3
 n_jobs = 2
 
 # The parameters for clusterring test
-#permutation = 8192
+permutation = 8192
 mt = 1 #max_step for spatio-temporal clustering
-permutation = 1000    # testing only
+#permutation = 100   # testing only
 pct = 100 # The percentile of baseline STCs distributions
-pthr = 0.0001 #f-threshold
+pthr = 0.0000001 #f-threshold
 if method == 'dSPM':
     thr = 5.67#Threshold corresponding 0.0001 interval
 elif method == 'MNE':
     thr = 5.67
 p_v = 0.01 # comparisons corrected p-value
-tail = 1 # 0 for two tails test, 1 for 1 tail test.
+tail = 0 # 0 for two tails test, 1 for 1 tail test.
 ############################################
 # make inverse operator of filtered evoked 
 #------------------------------------------
@@ -141,8 +141,7 @@ if do_2sample:
 if do_clu2STC:
     print '>>> Transfer cluster to STC ....'
     from stat_cluster import clu2STC
-    #Here you can modify the path of NPZs including sinificant clusters
-    fn_list = glob.glob(stcs_path + 'clu2sample_Group_*_%d_%dtail_pthr%.4f.npz' %(permutation/2, 1+(tail==0), pthr))
+    fn_list = glob.glob(stcs_path + 'clu2sample_Group_*_%d_%dtail_pthr%.7f.npz' %(permutation/2, 1+(tail==0), pthr))
     fn_list = sorted(fn_list)
     clu2STC(fn_list, p_thre=p_v)
     
