@@ -216,13 +216,15 @@ def Ara_norm(subjects, ncond, stcs_dir, out_path):
         tstep = stc.tstep
         fsave_vertices = stc.vertices
         ctime = min([A_evt.shape[-1], A_base.shape[-1]])
+        times = stc.times[:ctime]
         X = [A_evt[:, :, :ctime], A_base[:, :, :ctime]]
+        
         del A_evt, A_base
         # save data matrix
         X = np.array(X)
         #X = np.abs(X)  # only magnitude # don't do this here
         X = X.transpose(0,1,3,2)
-        np.savez(out_path + 'Group_%s.npz' % (cond), X=X, tstep=tstep,
+        np.savez(out_path + 'Group_%s.npz' % (cond), X=X, tstep=tstep, times=times,
                  fsave_vertices=fsave_vertices)
         del X
                     
@@ -532,6 +534,7 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_
         #    Note that X needs to be a multi-dimensional array of shape
         #    samples (subjects) x time x space, so we permute dimensions
         X = npz['X']
+        times = npz['times'] * 1000 # times in ms
         X_b = X[1]
         X = X[0]
         fn_path = os.path.dirname(fn_npz)
@@ -605,6 +608,7 @@ def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, 
         #    Note that X needs to be a multi-dimensional array of shape
         #    samples (subjects) x time x space, so we permute dimensions
         X = npz['X']
+        times = npz['times'] * 1000 # times in ms
         ppf = stats.f.ppf
         #tail = 1   # tail = we are interested in an increase of variance only
         p_thresh = pthr / (1 + (tail == 0))  # we can also adapt this to p=0.01 if the cluster size is too large
