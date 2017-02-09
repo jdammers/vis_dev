@@ -367,7 +367,139 @@ def sample1_clus_fixed(fn_list, n_per=8192, thre=5.3, p=0.01, tail=1,  del_vers=
         np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
         assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
                                     maybe you need to reset a lower p_threshold')
-                                    
+
+
+def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh,
+                 data=None, times=None, label='UnKonwn', p_accept=0.01, fnout=None):
+    '''
+    Extract information about the cluster test.
+
+    Parameter
+    ---------
+
+    T_obs: [n_times, n_vertices], as returned from the spatio-temporal cluster test
+
+    clusters: [n_clusters, 2]  for each cluster we have space and time indices
+
+    cluster_p_values: [n_clusters]
+
+    clu_thresh: threshold (i.e. sign. level) to find clusters across space and time
+
+    times: optional
+        STC time array (e.g. stc.times) in ms
+        if not set, sample index is used instead (note info will still be in ms)
+
+    grand_avg: optional
+        group averaged signal that was used for the spatio-temporal cluster test
+        shape: [n_times, n_vertices]
+        in case of a 1-sample test, these are the group averaged post-stim signals X
+        in case of a 2-sample test, these are the group averaged contrast data
+        e.g., contrast = np.abs(X[0].mean(axis=0) - X[1].mean(axis=0))
+
+    p_accept: p-value that defines the corrected p-value
+
+    fnout: if set, statistics will be saved
+    '''
+
+    import numpy as np
+
+    good_cluster_inds = np.where(cluster_p_values < p_accept)[0]
+
+    n_times, n_vert = T_obs.shape
+    n_cluster = len(cluster_p_values)
+    n_good = len(good_cluster_inds)
+
+    if not np.any(times):
+        times = np.arange(n_times)
+    t_step = times[1] - times[0]
+
+    txt = ['\n']
+    txt.append('>>> Cluster statistics:\n')
+    txt.append('cluster stat label: %s\n' % label)
+    txt.append('cluster threshold  %f\n' % clu_thresh)
+    txt.append('number of all clusters found: %d\n' % n_cluster)
+    txt.append('cluster p-value (sig. level) %0.6f\n' % p_accept)
+    txt.append('number of significant clusters found: %d\n' % n_good)
+    txt.append('smallest p-value found: %0.6f\n' % cluster_p_values.min())
+    txt.append('largest  p-value found (below sig. level): %0.6f\n' % cluster_p_values[good_cluster_inds].max())
+    txt.append('number of vertices and time points: %d , %d\n\n' % (n_vert, n_times))
+    txt.append('time step used for cluster analysis: %f\n' % t_step)
+    txt.append('=========================================================================\n')
+
+    if n_good > 0:
+        for i_clu, clu_idx in enumerate(good_cluster_inds):
+
+            # unpack cluster information, get unique indices
+            idx_time, idx_space = np.squeeze(clusters[clu_idx])
+            idx_space = np.unique(idx_space)
+            idx_time = np.unique(idx_time)
+            nsig_time = len(idx_time)
+            nsig_space = len(idx_space)
+            nsig_val = nsig_time * nsig_space
+
+            # time range of significant values
+            times_sig = times[idx_time]
+            ix_t1 = times_sig.argmin()
+            ix_t2 = times_sig.argmax()
+            sig_tstart = times_sig[ix_t1]  # in ms
+            sig_tend = times_sig[ix_t2]  # in ms
+            sig_duration = (ix_t2 - ix_t1) * t_step  # in ms
+
+            # sig. stat. values (t- or F stat) over space and time
+            stats = T_obs[:, idx_space]
+            stats = stats[idx_time, :]
+            stats_min = stats.min()
+            stats_max = stats.max()
+            stats_mean = stats.mean()
+            stats_max_alltimes = stats.max(axis=1)
+            ix_tmax = stats_max_alltimes.argmax()
+            time_max = times[idx_time[ix_tmax]]
+
+            # Group averaged signal data
+            if np.any(data):
+                sigpow = data[:, idx_space]
+                sigpow = sigpow[idx_time, :]
+                sigpow_min = sigpow.min()
+                sigpow_max = sigpow.max()
+                sigpow_mean = sigpow.mean()
+
+                sigpow_min_tmax = sigpow[ix_tmax].min()
+                sigpow_max_tmax = sigpow[ix_tmax].max()
+                sigpow_mean_tmax = sigpow[ix_tmax].mean()
+
+            # write info
+            txt.append('\n')
+            txt.append('Cluster #%d - stats on significant values\n' % (i_clu + 1))
+            txt.append('cluster p-value: %0.3f\n' % cluster_p_values[clu_idx])
+            txt.append('number of sig. time points with p<%0.2f:  %d\n' % (p_accept, nsig_time))
+            txt.append('number of sig. vertices    with p<%0.2f:  %d\n' % (p_accept, nsig_space))
+            txt.append('number of values           with p<%0.2f:  %d\n' % (p_accept, nsig_val))
+            txt.append('time window of sig. values [ms]: tmin = %d, tmax= %d\n' % (sig_tstart, sig_tend))
+            txt.append('      duration of cluster activity [ms]: duration = %d\n' % sig_duration)
+            txt.append('T/F-values in cluster:\n')
+            txt.append('   min = %0.2f\n' % stats_min)
+            txt.append('   max = %0.2f\n' % stats_max)
+            txt.append('   mean = %0.2f\n' % stats_mean)
+            txt.append('   time of max value = %d\n' % time_max)
+            if np.any(data):
+                txt.append('Data values in cluster over all time points:\n')
+                txt.append('   min = %f\n' % sigpow_min)
+                txt.append('   max = %f\n' % sigpow_max)
+                txt.append('   mean = %f\n' % sigpow_mean)
+                txt.append('Data values in cluster over at tmax:\n')
+                txt.append('   min = %f\n' % sigpow_min_tmax)
+                txt.append('   max = %f\n' % sigpow_max_tmax)
+                txt.append('   mean = %f\n' % sigpow_mean_tmax)
+                txt.append('-------------------------------------------------------------------------\n')
+
+    if fnout:
+        fid = open(fnout, "w")
+        fid.writelines(txt)
+        fid.close()
+
+    return txt
+
+
 def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 1sample ttest.
@@ -426,6 +558,16 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_
     
         #    Now select the clusters that are sig. at p < 0.05 (note that this value
         #    is multiple-comparisons corrected).
+        
+        # Record the information of the clusters
+        name = os.path.basename(fn_npz).split('_')[-1]
+        cond = name[:name.rfind('.npz')]
+        fn_out = fn_npz[:fn_npz.rfind('.npz')] + ',1sample,clus_info.txt'
+
+        info = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, data=X, label=cond,
+                            times=times, p_accept=0.01, fnout=fn_out)
+
+
         good_cluster_inds = np.where(cluster_p_values < p)[0]
         print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
     
@@ -457,21 +599,21 @@ def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, 
         fn_path = os.path.dirname(fn_npz)
         name = os.path.basename(fn_npz)
         #fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_pct%.2f.npz' %(n_per, pct)
-        fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.4f.npz' %(n_per, 1+(tail==0), pthr)
+        fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.7f.npz' %(n_per, 1+(tail==0), pthr)
         npz = np.load(fn_npz)
         tstep = npz['tstep'].flatten()[0]
         #    Note that X needs to be a multi-dimensional array of shape
         #    samples (subjects) x time x space, so we permute dimensions
         X = npz['X']
         ppf = stats.f.ppf
-        tail = 1   # tail = we are interested in an increase of variance only
+        #tail = 1   # tail = we are interested in an increase of variance only
         p_thresh = pthr / (1 + (tail == 0))  # we can also adapt this to p=0.01 if the cluster size is too large
         n_samples_per_group = [len(x) for x in X]
         f_threshold = ppf(1. - p_thresh, *n_samples_per_group)
         if np.sign(tail) < 0:
             f_threshold = -f_threshold
         fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
-        print('Clustering...')
+        print('Clustering..., with threshold:%.2f' %f_threshold)
         connectivity = spatial_tris_connectivity(grade_to_tris(5))
         T_obs, clusters, cluster_p_values, H0 = clu = \
             spatio_temporal_cluster_test(X, n_permutations=n_per, #step_down_p=0.001,
@@ -481,6 +623,15 @@ def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, 
     
         #    Now select the clusters that are sig. at p < 0.05 (note that this value
         #    is multiple-comparisons corrected).
+        # Record the information of the clusters
+        name = os.path.basename(fn_npz).split('_')[-1]
+        cond = name[:name.rfind('.npz')]
+        fn_out = fn_npz[:fn_npz.rfind('.npz')] + ',2sample,clus_info.txt'
+
+        data = np.abs(X[0].mean(axis=0) - X[1].mean(axis=0))   # of shape [n_times, n_vertices]
+        info = cluster_info(T_obs, clusters, cluster_p_values, f_threshold, data=data, label=cond,
+                            times=times, p_accept=p, fnout=fn_out)
+
         good_cluster_inds = np.where(cluster_p_values < p)[0]
         print 'the amount of significant clusters are: %d' % good_cluster_inds.shape
     
