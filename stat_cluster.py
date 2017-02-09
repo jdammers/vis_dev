@@ -1,8 +1,8 @@
 
 import os
 import numpy as np
-from scipy import stats as stats
-import glob
+#from scipy import stats as stats
+#import glob
 
 import mne
 from mne import (spatial_tris_connectivity,
@@ -11,6 +11,7 @@ from mne.stats import (spatio_temporal_cluster_1samp_test,
                        summarize_clusters_stc, spatio_temporal_cluster_test)
 
 from jumeg.jumeg_preprocessing import get_files_from_list
+from scipy import stats as stats
 
 def reset_directory(path=None):
     """
@@ -36,6 +37,17 @@ def set_directory(path=None):
     if not isexists:
         os.makedirs(path)
         
+def find_files(rootdir='.', pattern='*'):
+    import os, fnmatch
+    files = []
+    for root, dirnames, filenames in os.walk(rootdir):
+      for filename in fnmatch.filter(filenames, pattern):
+          files.append(os.path.join(root, filename))
+
+    files = sorted(files)
+
+    return files
+                
 def apply_inverse_ave(fnevo, subjects_dir):
     ''' Make individual inverse operator.
 
@@ -65,7 +77,7 @@ def apply_inverse_ave(fnevo, subjects_dir):
         [evoked] = mne.read_evokeds(fname)
         evoked.pick_types(meg=True, ref_meg=False)
         noise_cov = mne.read_cov(fn_cov)
-        # noise_cov = mne.cov.regularize(noise_cov, evoked.info,
+        # noise_cov = dSPM.cov.regularize(noise_cov, evoked.info,
         #                               mag=0.05, grad=0.05, proj=True)
         fwd = make_forward_solution(evoked.info, fn_trans, fn_src, fn_bem)
         fwd['surf_ori'] = True
@@ -81,7 +93,7 @@ def apply_STC_ave(fnevo, method='dSPM', snr=3.0):
         fnevo: string or list
             The evoked file with ECG, EOG and environmental noise free.
         method:string
-            Inverse method, 'MNE' or 'dSPM'
+            Inverse method, 'dSPM' or 'mne'
         snr: float
             Signal to noise ratio for inverse solution.
     '''
@@ -107,311 +119,399 @@ def apply_STC_ave(fnevo, method='dSPM', snr=3.0):
         stc.save(fn_stc)
 
 
-def morph_STC(fn_stc, grade, subjects_dir, template='fsaverage', event='LLst',
-              baseline=True, btmin=-0.3, btmax=0.):
+def morph_STC(fn_list, method, template='fsaverage', btmin=-0.3, btmax=0., 
+               subjects_dir=None):
     '''
         Morph individual STC into the common brain space.
 
         Parameter
         ------------------------------------
-        fn_stc: string or list
-            The path of the individual STC.
+        fn_list: list
+            The paths of the individual STCs.
         subjects_dir: The total bath of all the subjects.
         template: string
             The subject name as the common brain.
-        event: string
-            The name of event
-        baseline: bool
-            If true, prestimulus segment from 'btmin' to 'btmax' will be saved,
-            If false, no baseline segment is saved.
         btmin, btmax: float
             If 'baseline' is True, baseline is croped using this period.
 
     '''
     from mne import read_source_estimate, morph_data
-    fnlist = get_files_from_list(fn_stc)
-    for fname in fnlist:
+    for fname in fn_list:
         name = os.path.basename(fname)
         subject = name.split('_')[0]
+        cond = name.split('_')[-2]
+        import pdb
+        pdb.set_trace()
         stc_name = name[:name.rfind('-lh.stc')]
         min_dir = subjects_dir + '/%s' % template
         # this path used for ROI definition
-        stc_path = min_dir + '/dSPM_ROIs/%s' % (subject)
+        stc_path = min_dir + '/%_ROIs/%s' % (method, subject)
         # fn_cov = meg_path + '/%s_empty,fibp1-45,nr-cov.fif' % subject
         set_directory(stc_path)
         # Morph STC
         stc = read_source_estimate(fname)
-        stc_morph = morph_data(subject, template, stc, grade=grade, subjects_dir=subjects_dir)
+        stc_morph = morph_data(subject, template, stc, grade=5, subjects_dir=subjects_dir)
         stc_morph.save(stc_path + '/%s' % (stc_name), ftype='stc')
-        if baseline is True:
+        if cond[2:] == 'st':
             stc_base = stc_morph.crop(btmin, btmax)
-            stc_base.save(stc_path + '/%s_%s_baseline' % (subject, event[:2]),
+            stc_base.save(stc_path + '/%s_%s_baseline' % (subject, cond[:2]),
                           ftype='stc')
-
-
-def Ara_contr(evt_list, tmin, tmax, conf_type, out_path, n_subjects=14,
-              template='fsaverage', subjects_dir=None):
-
-    ''' Prepare arrays for the contrasts of conflicts perception
-        and conflicts response.
-
-        Parameter
-        ---------
-        evt_list: list
-            The events list.
-        tmin, tmax: float (s)
-            The time period of data.
-        conf_type: string
-            The type of contrasts,'conf_per' or 'conf_res'
-        out_path: string
-            The path to store aranged arrays.
-        n_subjects: int
-            The amount subjects.
-        subjects_dir: The total bath of all the subjects.
+                          
+#################################################################################
+# Spatial clustering
+#################################################################################
+    
+def Ara_norm(subjects, ncond, stcs_dir, out_path):
+    ''' 
+        Arange group arrays for pre vs post stimulus, zscore them and make
+        abs.
+        
+        Parameters:
+        --------------
+        subjects: list,
+            the subjects list.
+        ncond: int,
+            the amount of experimental conditions.
+        stcs_dir: string,
+            the path for searching stcs of each condition.
+        out_path: string,
+            the path for storing group z-sored arrays.
     '''
-    con_stcs = []
-    for evt in evt_list[:2]:
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % evt)
-        for fn_stc1 in fn_stc_list1[:n_subjects]:
-            stc1 = mne.read_source_estimate(fn_stc1, subject=template)
-            stc1.crop(tmin, tmax)
-            con_stcs.append(stc1.data)
-    cons = np.array(con_stcs).transpose(1, 2, 0)
-
-    # tmin = stc1.tmin
-    tstep = stc1.tstep
-    fsave_vertices = stc1.vertices
-    del stc1
-
-    incon_stcs = []
-    for evt in evt_list[2:]:
-        fn_stc_list2 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % evt)
-        for fn_stc2 in fn_stc_list2[:n_subjects]:
-            stc2 = mne.read_source_estimate(fn_stc2, subject=template)
-            stc2.crop(tmin, tmax)
-            incon_stcs.append(stc2.data)
-    incons = np.array(incon_stcs).transpose(1, 2, 0)
-    del stc2
-    X = [cons[:, :, :], incons[:, :, :]]
-    # import pdb
-    # pdb.set_trace()
-    # save data matrix
-    X = np.array(X).transpose(1, 2, 3, 0)
-    X = np.abs(X)  # only magnitude
-    np.savez(out_path + '%s.npz' % conf_type, X=X, tstep=tstep,
-             fsave_vertices=fsave_vertices)
-    return tstep, fsave_vertices, X
-
-
-def Ara_contr_base(evt_list, tmin, tmax, conf_type, out_path, n_subjects=13,
-                   template='fsaverage', subjects_dir=None):
-
-    ''' Prepare arrays for the data contrasts of prestimulus and post-stimulus.
-
-        Parameter
-        ---------
-        evt_list: list
-            The events list.
-        tmin, tmax: float (s)
-            The time period of data.
-        conf_type: string
-            The type of contrasts,'sti' or 'res'
-        out_path: string
-            The path to store aranged arrays.
-        n_subjects: int
-            The amount subjects.
-        subjects_dir: The total bath of all the subjects.
-    '''
-    for evt in evt_list:
-        stcs = []
-        bs_stcs = []
-        fn_stc_list1 = glob.glob(subjects_dir + '/fsaverage/dSPM_ROIs/*[0-9]/*fibp1-45,evt_%s_bc-lh.stc' % evt)
-        for fn_stc1 in fn_stc_list1[:n_subjects]:
-            # fn_stc2 = fn_stc1.split(evt)[0] + evt[:2] +  fn_stc1.split(evt)[1]
-            name = os.path.basename(fn_stc1)
-            fn_path = os.path.split(fn_stc1)[0]
+    nsubjects = len(subjects)
+    fn_list = find_files(stcs_dir, pattern='*evt*_bc-lh.stc') 
+    fn_list = np.reshape(fn_list,(nsubjects,ncond)) 
+    for icond in range(ncond):
+        fn_tmp = fn_list[0, icond]
+        name = os.path.basename(fn_tmp)
+        cond = name.split('_')[-2]
+        A_evt = []
+        A_base = []
+        for isubj in range(nsubjects):
+            fn_stc = fn_list[isubj, icond]
+            name = os.path.basename(fn_stc)
+            stc = mne.read_source_estimate(fn_stc)
+            if cond[2:] == 'st':
+                stc.crop(0, 0.3)
+            elif cond[2:] == 'rt':
+                stc.crop(-0.2, 0.1)
+            #data = stc.data.flatten()
+            data = stc.data
+            path = os.path.dirname(fn_stc)
             subject = name.split('_')[0]
-            fn_stc2 = fn_path + '/%s_%s_baseline-lh.stc' % (subject, evt[:2])
-            stc1 = mne.read_source_estimate(fn_stc1, subject=template)
-            stc1.crop(tmin, tmax)
-            stcs.append(stc1.data)
-            stc2 = mne.read_source_estimate(fn_stc2, subject=template)
-            bs_stcs.append(stc2.data)
-        stcs = np.array(stcs).transpose(1, 2, 0)
-        bs_stcs = np.array(bs_stcs).transpose(1, 2, 0)
-        # tmin = stc1.tmin
-        tstep = stc1.tstep
-        fsave_vertices = stc1.vertices
-        if stcs.shape[1] > bs_stcs.shape[1]:
-            X = [stcs[:, :bs_stcs.shape[1], :], bs_stcs[:, :, :]]
-        else:
-            X = [stcs[:, :, :], bs_stcs[:, :stcs.shape[1], :]]
-        del stcs, bs_stcs
+            fn_base = path + '/%s_%s_baseline-lh.stc' %(subject, cond[:2])
+            base_stc = mne.read_source_estimate(fn_base)
+            base_data = base_stc.data
+            b_mean = base_data.mean()
+            b_std = base_data.std()
+            
+            #z-score pre and post data
+            data = (data - b_mean) / b_std
+            base_data = (base_data - b_mean) / b_std
+            A_evt.append(data)
+            A_base.append(base_data)
+              
+        A_evt = np.array(A_evt)
+        A_base = np.array(A_base)
+        #print cond, np.percentile(np.abs(A_base), 95)
+        tstep = stc.tstep
+        fsave_vertices = stc.vertices
+        ctime = min([A_evt.shape[-1], A_base.shape[-1]])
+        X = [A_evt[:, :, :ctime], A_base[:, :, :ctime]]
+        del A_evt, A_base
         # save data matrix
-        X = np.array(X).transpose(1, 2, 3, 0)
-        X = np.abs(X)  # only magnitude
-        np.savez(out_path + '%s_%s.npz' % (conf_type, evt), X=X, tstep=tstep,
+        X = np.array(X)
+        #X = np.abs(X)  # only magnitude # don't do this here
+        X = X.transpose(0,1,3,2)
+        np.savez(out_path + 'Group_%s.npz' % (cond), X=X, tstep=tstep,
                  fsave_vertices=fsave_vertices)
         del X
-    # return tstep, fsave_vertices, X
+                    
+def exclu_vers(subjects_dir):
+    ''' Exclude the vertices of the medial wall.
+    '''    
+    fn_lmedial = subjects_dir + 'fsaverage/label/lh.Medial_wall.label'
+    lh_medial = mne.read_label(fn_lmedial)
+    lh_mvers = lh_medial.get_vertices_used()
+    fn_rmedial = subjects_dir + 'fsaverage/label/rh.Medial_wall.label'
+    rh_medial = mne.read_label(fn_rmedial)
+    rh_mvers = rh_medial.get_vertices_used()
+    rh_mvers = rh_mvers + 10242
+    del_vers = list(lh_mvers) + list(rh_mvers)
+    return del_vers
 
-
-def mv_ave(X, window, overlap, freqs=678.17):
-    '''
-      Resample the data on the time dimension.
-
-      Parameter
-      ---------
-      X: array
-        The shape of X should be (Vertices, timepoints, subjects, cases)
-      window: int
-        The window size for moving average
-      overlap: int
-        The overlap for the moving average
-      freqs: float or int
-        The sampling rate
-    '''
-    mv_wind = window * 0.001
-    step_wind = (window - overlap) * 0.001
-    st_point = 0
-    win_id = int(mv_wind * freqs)
-    ste_id = int(step_wind * freqs)
-    N_X = []
-    while win_id < X.shape[1]:
-        N_X.append(X[:, st_point:win_id, :, :].mean(axis=1))
-        win_id = win_id + ste_id
-        st_point = st_point + ste_id
-    N_X = np.array(N_X).transpose(1, 0, 2, 3)
-    return N_X
-
-
-def stat_clus(X, tstep, n_per=8192, p_threshold=0.01, p=0.05, fn_clu_out=None):
+def sample1_clus_thr(fn_list, n_per=8192, pthr=0.001, p=0.01, tail=1,  del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 1sample ttest.
 
       Parameter
       ---------
-      X: array
-        The shape of X should be (Vertices, timepoints, subjects)
-      tstep: float
-        The interval between timepoints.
+      fn_list: list
+        Paths of group arrays
       n_per: int
         The permutation for ttest.
-      p_threshold: float
-        The significant p_values.
+      pct: int or float.
+        The percentile of the baseline distribution.
       p: float
         The corrected p_values for comparisons.
-      fn_clu_out: string
-        The fnname for saving clusters.
+      tail: 1 or 0
+        if tail=1, that is 1 tail test
+        if tail=0, that is 2 tail test 
+      del_vers: None or _exclu_vers
+        If is '_exclu_vers', delete the vertices in the medial wall.
     '''
 
     print('Computing connectivity.')
     connectivity = spatial_tris_connectivity(grade_to_tris(5))
 
-    #    Note that X needs to be a multi-dimensional array of shape
-    #    samples (subjects) x time x space, so we permute dimensions
-    X = np.transpose(X, [2, 1, 0])
-    n_subjects = X.shape[0]
-    fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
+    # Using the percentile of baseline array as the distribution threshold
+    for fn_npz in fn_list:
+        
+        npz = np.load(fn_npz)
+        tstep = npz['tstep'].flatten()[0]
+        #    Note that X needs to be a multi-dimensional array of shape
+        #    samples (subjects) x time x space, so we permute dimensions
+        X = npz['X']
+        #X_b = X[1]
+        X = X[0]
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        n_subjects = X.shape[0]
+        if tail == 1:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.3f.npz' %(n_per, tail, pthr)
+            X = np.abs(X)
+            t_threshold = -stats.distributions.t.ppf(0.01, n_subjects-1)
+        elif tail == 0:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.3f.npz' %(n_per, tail+2, pthr)
+            t_threshold = -stats.distributions.t.ppf(pthr/2, n_subjects-1)
+            
+        fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
+    
+        #n_subjects = X.shape[0]
+        #t_threshold = -stats.distributions.t.ppf(0.01/(1+(tail==0)), n_subjects-1)
 
-    #    Now let's actually do the clustering. This can take a long time...
-    #    Here we set the threshold quite high to reduce computation.
-    t_threshold = -stats.distributions.t.ppf(p_threshold / 2., n_subjects - 1)
-    print('Clustering.')
-    T_obs, clusters, cluster_p_values, H0 = clu = \
-        spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
-                                           n_jobs=1, threshold=t_threshold,
-                                           n_permutations=n_per)
+        print('Clustering.')
+        T_obs, clusters, cluster_p_values, H0 = clu = \
+            spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
+                                            n_jobs=n_jobs, threshold=t_threshold,
+                                            n_permutations=n_per, tail=tail, spatial_exclude=del_vers)
+    
+        #    Now select the clusters that are sig. at p < 0.05 (note that this value
+        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
+    
+        # Save the clusters as stc file
+        np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
+        assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %pthr,\
+                                    maybe you need to reset a lower p_threshold')
 
-    #    Now select the clusters that are sig. at p < 0.05 (note that this value
-    #    is multiple-comparisons corrected).
-    good_cluster_inds = np.where(cluster_p_values < p)[0]
-    print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
+def sample1_clus_fixed(fn_list, n_per=8192, thre=5.3, p=0.01, tail=1,  del_vers=None, n_jobs=1, max_step=30):
+    '''
+      Calculate significant clusters using 1sample ttest.
 
-    # Save the clusters as stc file
-    np.savez(fn_clu_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
-    assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
-                                 maybe you need to reset a lower p_threshold')
+      Parameter
+      ---------
+      fn_list: list
+        Paths of group arrays
+      n_per: int
+        The permutation for ttest.
+      pct: int or float.
+        The percentile of the baseline distribution.
+      p: float
+        The corrected p_values for comparisons.
+      tail: 1 or 0
+        if tail=1, that is 1 tail test
+        if tail=0, that is 2 tail test 
+      del_vers: None or _exclu_vers
+        If is '_exclu_vers', delete the vertices in the medial wall.
+    '''
+
+    print('Computing connectivity.')
+    connectivity = spatial_tris_connectivity(grade_to_tris(5))
+
+    # Using the percentile of baseline array as the distribution threshold
+    for fn_npz in fn_list:
+        
+        npz = np.load(fn_npz)
+        tstep = npz['tstep'].flatten()[0]
+        #    Note that X needs to be a multi-dimensional array of shape
+        #    samples (subjects) x time x space, so we permute dimensions
+        X = npz['X']
+        X = X[0]
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        t_threshold = thre
+        if tail == 1:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_thr%.2f.npz' %(n_per, tail, thre)
+            X = np.abs(X)
+        elif tail == 0:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_thr%.2f.npz' %(n_per, tail+2, thre)
+            
+        fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
+    
+        #n_subjects = X.shape[0]
+        #t_threshold = -stats.distributions.t.ppf(0.01/(1+(tail==0)), n_subjects-1)
+
+        print('Clustering.')
+        T_obs, clusters, cluster_p_values, H0 = clu = \
+            spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
+                                            n_jobs=n_jobs, threshold=t_threshold,
+                                            n_permutations=n_per, tail=tail, max_step=max_step, spatial_exclude=del_vers)
+    
+        #    Now select the clusters that are sig. at p < 0.05 (note that this value
+        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
+    
+        # Save the clusters as stc file
+        np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
+        assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
+                                    maybe you need to reset a lower p_threshold')
+                                    
+def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_jobs=1):
+    '''
+      Calculate significant clusters using 1sample ttest.
+
+      Parameter
+      ---------
+      fn_list: list
+        Paths of group arrays
+      n_per: int
+        The permutation for ttest.
+      pct: int or float.
+        The percentile of the baseline distribution.
+      p: float
+        The corrected p_values for comparisons.
+      tail: 1 or 0
+        if tail=1, that is 1 tail test
+        if tail=0, that is 2 tail test 
+      del_vers: None or _exclu_vers
+        If is '_exclu_vers', delete the vertices in the medial wall.
+    '''
+
+    print('Computing connectivity.')
+    connectivity = spatial_tris_connectivity(grade_to_tris(5))
+
+    # Using the percentile of baseline array as the distribution threshold
+    for fn_npz in fn_list:
+        
+        npz = np.load(fn_npz)
+        tstep = npz['tstep'].flatten()[0]
+        #    Note that X needs to be a multi-dimensional array of shape
+        #    samples (subjects) x time x space, so we permute dimensions
+        X = npz['X']
+        X_b = X[1]
+        X = X[0]
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        
+        if tail == 1:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f.npz' %(n_per, tail, pct)
+            X = np.abs(X)
+            t_threshold = np.percentile(np.abs(X_b), pct)
+        elif tail == 0:
+            fn_out = fn_path + '/clu1sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pct%.3f.npz' %(n_per, tail+2, pct)
+            t_threshold = np.percentile(X_b, pct)
+            
+        fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
+    
+        #n_subjects = X.shape[0]
+        #t_threshold = -stats.distributions.t.ppf(0.01/(1+(tail==0)), n_subjects-1)
+
+        print('Clustering.')
+        T_obs, clusters, cluster_p_values, H0 = clu = \
+            spatio_temporal_cluster_1samp_test(X, connectivity=connectivity,
+                                            n_jobs=n_jobs, threshold=t_threshold,
+                                            n_permutations=n_per, tail=tail, spatial_exclude=del_vers)
+    
+        #    Now select the clusters that are sig. at p < 0.05 (note that this value
+        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
+    
+        # Save the clusters as stc file
+        np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
+        assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
+                                    maybe you need to reset a lower p_threshold')
 
 
 
-def per2test(X1, X2, p_thr, p, tstep, n_per=8192, fn_clu_out=None):
+def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 2 sample ftest.
 
       Parameter
       ---------
-      X1, X2: array
-        The shape of X should be (Vertices, timepoints, subjects)
-      tstep: float
-        The interval between timepoints.
+      fn_list: list
+        Paths of group arrays
       n_per: int
         The permutation for ttest.
-      p_thr: float
-        The significant p_values.
+      pct: int or float.
+        The percentile of the baseline distribution.
       p: float
         The corrected p_values for comparisons.
-      fn_clu_out: string
-        The fnname for saving clusters.
+      del_vers: None or _exclu_vers
+        If is '_exclu_vers', delete the vertices in the medial wall.
     '''
-    #    Note that X needs to be a multi-dimensional array of shape
-    #    samples (subjects) x time x space, so we permute dimensions
-    n_subjects1 = X1.shape[2]
-    n_subjects2 = X2.shape[2]
-    fsave_vertices = [np.arange(X1.shape[0]/2), np.arange(X1.shape[0]/2)]
-    X1 = np.transpose(X1, [2, 1, 0])
-    X2 = np.transpose(X2, [2, 1, 0])
-    X = [X1, X2]
+    for fn_npz in fn_list:
+        fn_path = os.path.dirname(fn_npz)
+        name = os.path.basename(fn_npz)
+        #fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_pct%.2f.npz' %(n_per, pct)
+        fn_out = fn_path + '/clu2sample_%s' %name[:name.rfind('.npz')] + '_%d_%dtail_pthr%.4f.npz' %(n_per, 1+(tail==0), pthr)
+        npz = np.load(fn_npz)
+        tstep = npz['tstep'].flatten()[0]
+        #    Note that X needs to be a multi-dimensional array of shape
+        #    samples (subjects) x time x space, so we permute dimensions
+        X = npz['X']
+        ppf = stats.f.ppf
+        tail = 1   # tail = we are interested in an increase of variance only
+        p_thresh = pthr / (1 + (tail == 0))  # we can also adapt this to p=0.01 if the cluster size is too large
+        n_samples_per_group = [len(x) for x in X]
+        f_threshold = ppf(1. - p_thresh, *n_samples_per_group)
+        if np.sign(tail) < 0:
+            f_threshold = -f_threshold
+        fsave_vertices = [np.arange(X.shape[-1]/2), np.arange(X.shape[-1]/2)]
+        print('Clustering...')
+        connectivity = spatial_tris_connectivity(grade_to_tris(5))
+        T_obs, clusters, cluster_p_values, H0 = clu = \
+            spatio_temporal_cluster_test(X, n_permutations=n_per, #step_down_p=0.001,
+                                        connectivity=connectivity, n_jobs=n_jobs,
+                                        # threshold=t_threshold, stat_fun=stats.ttest_ind)
+                                        threshold=f_threshold, spatial_exclude=del_vers, tail=tail)
+    
+        #    Now select the clusters that are sig. at p < 0.05 (note that this value
+        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' % good_cluster_inds.shape
+    
+        # Save the clusters as stc file
+        np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
+        assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
+                                    maybe you need to reset a lower p_threshold')
 
-    #    Now let's actually do the clustering. This can take a long time...
-    #    Here we set the threshold quite high to reduce computation.
-    f_threshold = stats.distributions.f.ppf(1. - p_thr / 2., n_subjects1 - 1,
-                                            n_subjects2 - 1)
-    # t_threshold = stats.distributions.t.ppf(1. - p_thr / 2., n_subjects1 - 1,
-    #                                         n_subjects2 - 1)
 
-    print('Clustering...')
-    connectivity = spatial_tris_connectivity(grade_to_tris(5))
-    T_obs, clusters, cluster_p_values, H0 = clu = \
-        spatio_temporal_cluster_test(X, n_permutations=n_per, #step_down_p=0.001,
-                                     connectivity=connectivity, n_jobs=1,
-                                     # threshold=t_threshold, stat_fun=stats.ttest_ind)
-                                     threshold=f_threshold)
-
-    #    Now select the clusters that are sig. at p < 0.05 (note that this value
-    #    is multiple-comparisons corrected).
-    good_cluster_inds = np.where(cluster_p_values < p)[0]
-    print 'the amount of significant clusters are: %d' % good_cluster_inds.shape
-
-    # Save the clusters as stc file
-    np.savez(fn_clu_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
-    assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
-                                 maybe you need to reset a lower p_threshold')
-
-
-def clu2STC(fn_cluster, p_thre=0.05, tstep=None):
+def clu2STC(fn_list, p_thre=0.05):
     '''
         Generate STCs from significant clusters
 
         Parameters
         -------
-        fn_cluster: string
-            The filename of significant clusters.
+        fn_list: string
+            The paths of significant clusters.
         p_thre: float
             The corrected p_values.
-        tstep: float
-            The interval between timepoints.
+        
     '''
-    fn_stc_out = fn_cluster[:fn_cluster.rfind('.npz')] + ',temp_%.3f' % (p_thre)
-    npz = np.load(fn_cluster)
-    if tstep is None:
+    for fn_cluster in fn_list:
+        fn_stc_out = fn_cluster[:fn_cluster.rfind('.npz')] + ',pv_%.3f' % (p_thre)
+        npz = np.load(fn_cluster)
+        clu = npz['clu']
+        good_cluster_inds = np.where(clu[2] < p_thre)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
+        fsave_vertices = list(npz['fsave_vertices'])
         tstep = npz['tstep'].flatten()[0]
-    clu = npz['clu']
-    fsave_vertices = list(npz['fsave_vertices'])
-    stc_all_cluster_vis = summarize_clusters_stc(clu, p_thre, tstep=tstep,
-                                                 vertices=fsave_vertices,
-                                                 subject='fsaverage')
-
-    if fn_stc_out is None:
-        return stc_all_cluster_vis
-    stc_all_cluster_vis.save(fn_stc_out)
+        stc_all_cluster_vis = summarize_clusters_stc(clu, p_thre, tstep=tstep,
+                                                    vertices=fsave_vertices,
+                                                    subject='fsaverage')
+    
+        stc_all_cluster_vis.save(fn_stc_out)

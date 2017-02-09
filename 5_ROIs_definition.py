@@ -40,24 +40,32 @@ src = mne.read_source_spaces(fn_src)
 conditions = [('sti', 'LLst'), ('sti', 'RRst'), ('sti', 'RLst'), ('sti', 'LRst'),
               ('res', 'LLrt'), ('res', 'RRrt'), ('res', 'RLrt'), ('res', 'LRrt')]
 #fn_stcdata = stcs_path + 'stcsdata.npy'
-thr = 0 # Threshold of the time span of STC (ms)
+thr = 95 # Threshold of the time span of STC (ms)
 vert_size = 10 # minimum size for ROIs (mm)
 
-do_ROIs = False
+do_ROIs = True
 if do_ROIs:
     reset_directory(labels_path+'ini/')
     for cond in conditions:
         side = cond[0]
         conf_type = cond[1]
-        fn_stc = stcs_path + 'Ttestpermu16384_pthr0.0001_%s_%s,temp_0.005-rh.stc' %(side, conf_type)
+        fn_stc = stcs_path + 'Ttestpermu8192_pthr0.0001_%s_%s,pthre_0.005-rh.stc' %(side, conf_type)
         #fn_stc = stcs_path + 'Ttestpermu16384_pthr0.0001_%s_%s,temp_0.005-rh.stc' %(side, conf_type)
         stc = mne.read_source_estimate(fn_stc)
-        data = stc.data
-        print '%s_%s condition, the time span is: min %.4f, max %.4f, median %.4f' \
-               %(side, conf_type, data[np.nonzero(data)].min(), data[np.nonzero(data)].max(),np.median(data[np.nonzero(data)]))
-        data[data < thr] = 0
-        stc.data.setfield(data, np.float32)
-        lh_labels, rh_labels = mne.stc_to_label(stc, src=src, smooth=True,
+        stc_sub = stc.copy().mean()
+        data = np.zeros(stc_sub.data.shape)
+        data[:, 0] = stc.data[:, 0]
+        abs_data = abs(data)
+        #data[abs_data<np.percentile(abs_data, thr)] = 0
+        print np.argwhere(abs_data).shape[0]
+        #abs_data[abs_data < thr] = 0
+        #print 'time_duration:%.3f' %np.percentile(abs_data[np.where(abs_data)], thr)
+        #abs_data[abs_data < np.percentile(abs_data[np.where(abs_data)], thr)] = 0
+        abs_data[abs_data < np.percentile(abs_data, thr)] = 0
+        print np.argwhere(abs_data).shape[0]
+        stc_sub.data.setfield(abs_data, np.float32)
+        #stc.data.setfield(data, np.float32)
+        lh_labels, rh_labels = mne.stc_to_label(stc_sub, src=src, smooth=True,
                                         subjects_dir=subjects_dir, connected=True)
         i = 0
         while i < len(lh_labels):
@@ -83,12 +91,12 @@ if do_ROIs:
             j = j + 1
 
 # Merge ROIs across conditions
-do_merge = False
+do_merge = True
 if do_merge:
     apply_merge(labels_path)
 
 # Split large cluster
-do_split = True
+do_split = False
 if do_split:
     ''' Before this conduction, we need to check the large ROI which are
         necessary for splitting. Collect the anatomical labels involve in
@@ -124,7 +132,7 @@ if do_split:
                     chi_label.save(chis_path+ana_label.name)
                 
 # Merge ROIs with the same anatomical labels.   
-do_merge_ana = True
+do_merge_ana = False
 if do_merge_ana:
     import shutil
     ana_path = glob.glob(labels_path + 'func_ana/*')
@@ -155,7 +163,7 @@ if do_merge_ana:
 #    #fn_src = subjects_dir + '/fsaverage/bem/fsaverage-ico-5-src.fif'
 #    redu_small(tar_path, vert_size, fn_src)
     
-do_write_list = True
+do_write_list = False
 if do_write_list:
     tar_path = labels_path + 'func/'
     func_list1 = glob.glob(tar_path + '*-lh.label')

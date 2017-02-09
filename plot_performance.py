@@ -4,7 +4,8 @@ from dirs_manage import set_directory
 subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
 per_path = subjects_dir + 'performance/'
 set_directory(per_path) 
-fn_raw_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*rfDC-raw.fif')
+#fn_raw_list = glob.glob(subjects_dir + '/*[0-9]/MEG/*rfDC-raw.fif')
+fn_raw_list = glob.glob(subjects_dir + '/203840/MEG/*rfDC-raw.fif')
 for fn_raw in fn_raw_list:
     fn_raw_clean = fn_raw[:fn_raw.rfind('-raw.fif')] + ',nr,ocarta-raw.fif'
     subject = os.path.basename(fn_raw).split('_')[0]

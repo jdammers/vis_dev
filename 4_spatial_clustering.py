@@ -1,80 +1,54 @@
-import glob
-
+import glob,os
+from stat_cluster import set_directory
+from stat_cluster import find_files
 #####################################################
 # Aplly spatio-temporal clustering for ROI defintion
 #####################################################
 ''' From here data will be calculated in the source
-    space.
+    space. 
 '''
-subjects_dir = '/home/uais_common/dong/freesurfer/subjects/'
-MIN_path = subjects_dir + 'fsaverage'
+
+
 do_make_inve = False # Generate inverse operator
 do_inver_ave = False # make STC
 do_morph_STC = False # Morph individual STC
 do_group_STC = False # Group morphed STC into pre and post-stimuls (events)
 do_t_test = False # Spatial clustering
-do_clu2STC = True # Transfer cluster arrays into STC objects.
+do_2sample = True #2 sample test
+do_clu2STC = True# Transfer cluster arrays into STC objects.
+ex_medial = False # Take the medial wall vertices into cluster estimation
+#The main path for ROI definition
+subjects_dir = os.environ['SUBJECTS_DIR']+'/'
 
-# Set the option for stimulus or response
-conf_per = True
-conf_res = False
-#conf_per = sys.argv[1]
-#conf_res = sys.argv[2]
-
-stcs_path = subjects_dir + 'fsaverage/conf_stc/'
-n_subjects = 13 # The amount of subjects
-st_list = ['LLst', 'RRst', 'RLst',  'LRst'] # stimulus events
-res_list = ['LLrt', 'RRrt', 'LRrt', 'RLrt'] # response events
-st_max, st_min = 0.3, 0. # time period of stimulus
-res_max, res_min = 0.1, -0.2 # time period of response
-
-# parameter of Morphing
-grade = 5
-method = 'dSPM'
-snr = 2
-template = 'fsaverage' # The common brain space
-
-# Parameters of Moving average
-mv_window = 10 # miliseconds
-overlap = 0 # miliseconds
-nfreqs = 678.17
+# parameter of Inversing and Morphing
+#method = 'dSPM'
+method = 'MNE'
+snr = 3
+n_jobs = 2
 
 # The parameters for clusterring test
-permutation = 16384
-p_th = 0.0001 # spatial p-value
-p_v = 0.005 # comparisons corrected p-value
-
-
-
-#stimulus
-if conf_per == True:
-#if conf_per == 'True':
-    evt_list = st_list
-    tmin, tmax = st_min, st_max
-    conf_type = 'sti'
-    baseline = True
-
-#response
-elif conf_res == True:
-#elif conf_res == 'True':
-    evt_list = res_list
-    tmin, tmax = res_min, res_max
-    conf_type = 'res'
-    baseline = False
-
-
+#permutation = 8192
+mt = 1 #max_step for spatio-temporal clustering
+permutation = 1000    # testing only
+pct = 100 # The percentile of baseline STCs distributions
+pthr = 0.0001 #f-threshold
+if method == 'dSPM':
+    thr = 5.67#Threshold corresponding 0.0001 interval
+elif method == 'MNE':
+    thr = 5.67
+p_v = 0.01 # comparisons corrected p-value
+tail = 1 # 0 for two tails test, 1 for 1 tail test.
 ############################################
 # make inverse operator of filtered evoked 
 #------------------------------------------
 if do_make_inve:
     from stat_cluster import apply_inverse_ave
     print '>>> Calculate inverse solution ....'
-    fn_evt_list = glob.glob(subjects_dir+'*[0-9]/MEG/*fibp1-45,evt_LLst_bc-ave.fif')
+    fn_evt_list = glob.glob(subjects_dir+'*[0-9]/MEG/*bcc,nr,fibp1-45,ar,evt_LLst_bc-ave.fif')
     apply_inverse_ave(fn_evt_list, subjects_dir)
     print '>>> FINISHED with inverse solution.'
     print ''       
         
-
 ############################################
 # inverse evo to the source space 
 #------------------------------------------
@@ -82,7 +56,8 @@ if do_make_inve:
 if do_inver_ave:
     print '>>> Calculate STC ....'
     from stat_cluster import apply_STC_ave
-    fn_evt_list = glob.glob(subjects_dir+'*[0-9]/MEG/*fibp1-45,evt_*_bc-ave.fif')
+    fn_evt_list = find_files(subjects_dir, pattern='*bcc,nr,fibp1-45,ar,evt_*_bc-ave.fif') 
+    #fn_evt_list = glob.glob(subjects_dir+'*[0-9]/MEG/*bcc,nr,fibp1-45,ar,evt_*_bc-ave.fif')
     apply_STC_ave(fn_evt_list, method=method, snr=snr)
     print '>>> FINISHED with STC generation.'
     print ''
@@ -94,21 +69,28 @@ if do_inver_ave:
 if do_morph_STC:
     print '>>> Calculate morphed STC ....'
     from stat_cluster import morph_STC
-    for evt in evt_list:
-        #fn_stc_list = glob.glob(subjects_dir+'/*[0-9]/MEG/*fibp1-45,evtW_%s_bc-lh.stc' %evt)
-        fn_stc_list = glob.glob(subjects_dir+'*[0-9]/MEG/*fibp1-45,evt_%s_bc-lh.stc' %evt)
-        morph_STC(fn_stc_list, grade, subjects_dir, template, event=evt, baseline=baseline)
+    fn_stc_list = glob.glob(subjects_dir+'*[0-9]/MEG/*bcc,nr,fibp1-45,ar,evt_*_bc-lh.stc')
+    fn_stc_list = sorted(fn_stc_list)
+    morph_STC(fn_stc_list, method, subjects_dir=subjects_dir)
     print '>>> FINISHED with morphed STC generation.'
     print ''
 
 ###################################################
 # Group STCs into pre- and post-stimulus (events)
 #--------------------------------------------------
+
+#The path for storing the results related with ROIs
+stcs_path = subjects_dir + 'fsaverage/%s_conf_stc/' %method
+set_directory(stcs_path)
+
 if do_group_STC:
     print '>>> Calculate Matrix for contrasts ....'
-    from stat_cluster import Ara_contr_base
-    Ara_contr_base(evt_list, tmin, tmax, conf_type, stcs_path, n_subjects=n_subjects,
-                   template='fsaverage', subjects_dir=subjects_dir)
+    from stat_cluster import Ara_norm
+    subjects = ['203731', '201195', '203709', '203792', '203969', '203822',
+                    '203929', '203867', '203147', '203267', '203840', '203780', '203288']   
+    ncond = 8 
+    stcs_dir = subjects_dir + 'fsaverage/%s_ROIs' %method
+    Ara_norm(subjects, ncond, stcs_dir, stcs_path)
     print '>>> FINISHED with a group matrix generation.'
     print ''
 
@@ -116,36 +98,52 @@ if do_group_STC:
 # Spatial clustering for significant clusters related with events
 #----------------------------------------------------------------
 if do_t_test:
-    print '>>> ttest for clustering ....'
-    from stat_cluster import clu2STC, stat_clus
-    for evt in evt_list:
-        evt = '%s_%s' %(conf_type, evt)
-        fnmat = stcs_path + evt + '.npz'
-        permutation1 = permutation 
-        #conf_mark = 'ttest_' + conf_type
-        print '>>> load Matrix for contrasts ....'
-        import numpy as np
-        npz = np.load(fnmat)
-        tstep = npz['tstep'].flatten()[0]
-        X = npz['X']
-        print '>>> FINISHED with the group matrix loaded.'
-        print ''
-        X1 = X[:, :, :n_subjects, 0]
-        X2 = X[:, :, :n_subjects, 1]
-        fn_clu_out = stcs_path + 'Ttestpermu%d_pthr%.4f_%s.npz' %(permutation1, p_th, evt)
-        Y = X1 - X2  # make paired contrast
-        stat_clus(Y, tstep, n_per=permutation1, p_threshold=p_th, p=p_v,
-                fn_clu_out=fn_clu_out)
-        print Y.shape
-        del Y
-        clu2STC(fn_clu_out, p_thre=p_v)
+    print '>>> 1sampletest for clustering ....'
+    from stat_cluster import sample1_clus, exclu_vers, sample1_clus_thr, sample1_clus_fixed 
+    fn_list = glob.glob(stcs_path + 'Group_*.npz')
+    fn_list = sorted(fn_list)
+    #exclude medial wall vertices or not
+    if ex_medial:
+        del_vers = exclu_vers(subjects_dir)
+    else:
+        del_vers = None
+        
+    sample1_clus(fn_list, n_per=permutation, pct=pct, p=p_v, tail=tail, del_vers=del_vers, n_jobs=n_jobs)
+    #sample1_clus_thr(fn_list[:1], n_per=permutation, pthr=pthr, p=p_v, tail=tail, del_vers=del_vers, n_jobs=n_jobs)
+    #sample1_clus_fixed(fn_list, n_per=permutation, thre=thr, p=p_v, tail=tail, max_step=mt, del_vers=del_vers, n_jobs=n_jobs)
     print '>>> FINISHED with the clusters generation.'
     print ''
 
+###############################################################################
+# Clustering using 2sample f-test
+# -----------------
+if do_2sample:
+    ''' This comparison is suitable for the samples from different entireties
+    '''
+    print '>>> 2smpletest for clustering ....'
+    permutation2 = permutation / 2
+    from stat_cluster import sample2_clus, exclu_vers 
+    fn_list = glob.glob(stcs_path + 'Group_*.npz')
+    fn_list = sorted(fn_list)
+    #exclude medial wall vertices or not
+    if ex_medial:
+        del_vers = exclu_vers(subjects_dir)
+    else:
+        del_vers = None
+        
+    sample2_clus(fn_list, n_per=permutation2, pthr=pthr, p=p_v, del_vers=del_vers, tail=tail)
+    print '>>> FINISHED with the clusters generation.'
+    print ''
+    
+###############################################################################
+# Transfer significant cluster into STCs
+# ----------------------------------------
 if do_clu2STC:
     print '>>> Transfer cluster to STC ....'
     from stat_cluster import clu2STC
-    for evt in evt_list:
-        evt = '%s_%s' %(conf_type, evt)
-        fn_cluster = stcs_path + 'Ttestpermu%d_pthr%.4f_%s.npz' %(permutation, p_th, evt)
-        clu2STC(fn_cluster, p_thre=p_v)
+    #Here you can modify the path of NPZs including sinificant clusters
+    fn_list = glob.glob(stcs_path + 'clu2sample_Group_*_%d_%dtail_pthr%.4f.npz' %(permutation/2, 1+(tail==0), pthr))
+    fn_list = sorted(fn_list)
+    clu2STC(fn_list, p_thre=p_v)
+    
+        
