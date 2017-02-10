@@ -638,7 +638,7 @@ def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, 
         fn_out1 = fn_npz[:fn_npz.rfind('.npz')] + ',2sample,clus_info.txt'
 
         data = np.abs(X[0].mean(axis=0) - X[1].mean(axis=0))   # of shape [n_times, n_vertices]
-        cluster_pvalues = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, min_duration=min_duration, data=data, label=cond,
+        cluster_pvalues = cluster_info(T_obs, clusters, cluster_p_values, f_threshold, min_duration=min_duration, data=data, label=cond,
                             times=times, p_accept=p, fnout=fn_out1)
 
         
