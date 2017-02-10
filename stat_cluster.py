@@ -564,10 +564,10 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_
         # Record the information of the clusters
         name = os.path.basename(fn_npz).split('_')[-1]
         cond = name[:name.rfind('.npz')]
-        fn_out = fn_npz[:fn_npz.rfind('.npz')] + ',1sample,clus_info.txt'
+        fn_out1 = fn_npz[:fn_npz.rfind('.npz')] + ',1sample,clus_info.txt'
         data = np.abs(X.mean(axis=0))
         info = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, data=data, label=cond,
-                            times=times, p_accept=0.01, fnout=fn_out)
+                            times=times, p_accept=0.01, fnout=fn_out1)
 
 
         good_cluster_inds = np.where(cluster_p_values < p)[0]
@@ -629,11 +629,11 @@ def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, 
         # Record the information of the clusters
         name = os.path.basename(fn_npz).split('_')[-1]
         cond = name[:name.rfind('.npz')]
-        fn_out = fn_npz[:fn_npz.rfind('.npz')] + ',2sample,clus_info.txt'
+        fn_out1 = fn_npz[:fn_npz.rfind('.npz')] + ',2sample,clus_info.txt'
 
         data = np.abs(X[0].mean(axis=0) - X[1].mean(axis=0))   # of shape [n_times, n_vertices]
         info = cluster_info(T_obs, clusters, cluster_p_values, f_threshold, data=data, label=cond,
-                            times=times, p_accept=p, fnout=fn_out)
+                            times=times, p_accept=p, fnout=fn_out1)
 
         good_cluster_inds = np.where(cluster_p_values < p)[0]
         print 'the amount of significant clusters are: %d' % good_cluster_inds.shape
