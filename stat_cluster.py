@@ -371,7 +371,7 @@ def sample1_clus_fixed(fn_list, n_per=8192, thre=5.3, p=0.01, tail=1,  del_vers=
                                     maybe you need to reset a lower p_threshold')
 
 
-def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh,
+def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
                  data=None, times=None, label='UnKonwn', p_accept=0.01, fnout=None):
     '''
     Extract information about the cluster test.
@@ -446,7 +446,11 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh,
             sig_tstart = times_sig[ix_t1]  # in ms
             sig_tend = times_sig[ix_t2]  # in ms
             sig_duration = (ix_t2 - ix_t1) * t_step  # in ms
-
+            
+            if sig_duration < min_duration:
+                print sig_duration
+                cluster_p_values[clu_idx] = 1
+                
             # sig. stat. values (t- or F stat) over space and time
             stats = T_obs[:, idx_space]
             stats = stats[idx_time, :]
@@ -498,10 +502,10 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh,
         fid.writelines(txt)
         fid.close()
 
-    return txt
+    return cluster_p_values
 
 
-def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_jobs=1):
+def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  min_duration, del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 1sample ttest.
 
@@ -558,21 +562,23 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_
                                             n_jobs=n_jobs, threshold=t_threshold,
                                             n_permutations=n_per, tail=tail, spatial_exclude=del_vers)
     
-        #    Now select the clusters that are sig. at p < 0.05 (note that this value
-        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
         
         # Record the information of the clusters
         name = os.path.basename(fn_npz).split('_')[-1]
         cond = name[:name.rfind('.npz')]
         fn_out1 = fn_npz[:fn_npz.rfind('.npz')] + ',1sample,clus_info.txt'
         data = np.abs(X.mean(axis=0))
-        info = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, data=data, label=cond,
-                            times=times, p_accept=0.01, fnout=fn_out1)
+        cluster_pvalues = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, min_duration=min_duration, data=data, label=cond,
+                            times=times, p_accept=p, fnout=fn_out1)
 
-
-        good_cluster_inds = np.where(cluster_p_values < p)[0]
-        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
-    
+        
+        good_cluster_inds = np.where(cluster_pvalues < p)[0]
+        print 'the amount of significant clusters and duration larger than %d ms are: %d' %(min_duration, good_cluster_inds.shape)
+        clu = list(clu)
+        clu[2] = cluster_pvalues
+        clu = tuple(clu)
         # Save the clusters as stc file
         np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
         assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
@@ -624,21 +630,23 @@ def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, 
                                         # threshold=t_threshold, stat_fun=stats.ttest_ind)
                                         threshold=f_threshold, spatial_exclude=del_vers, tail=tail)
     
-        #    Now select the clusters that are sig. at p < 0.05 (note that this value
-        #    is multiple-comparisons corrected).
+        good_cluster_inds = np.where(cluster_p_values < p)[0]
+        print 'the amount of significant clusters are: %d' %good_cluster_inds.shape
         # Record the information of the clusters
         name = os.path.basename(fn_npz).split('_')[-1]
         cond = name[:name.rfind('.npz')]
         fn_out1 = fn_npz[:fn_npz.rfind('.npz')] + ',2sample,clus_info.txt'
 
         data = np.abs(X[0].mean(axis=0) - X[1].mean(axis=0))   # of shape [n_times, n_vertices]
-        info = cluster_info(T_obs, clusters, cluster_p_values, f_threshold, data=data, label=cond,
+        cluster_pvalues = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, min_duration=min_duration, data=data, label=cond,
                             times=times, p_accept=p, fnout=fn_out1)
 
-        good_cluster_inds = np.where(cluster_p_values < p)[0]
-        print 'the amount of significant clusters are: %d' % good_cluster_inds.shape
-    
-        # Save the clusters as stc file
+        
+        good_cluster_inds = np.where(cluster_pvalues < p)[0]
+        print 'the amount of significant clusters and duration larger than %d ms are: %d' %(min_duration, good_cluster_inds.shape)
+        clu = list(clu)
+        clu[2] = cluster_pvalues
+        clu = tuple(clu)
         np.savez(fn_out, clu=clu, tstep=tstep, fsave_vertices=fsave_vertices)
         assert good_cluster_inds.shape != 0, ('Current p_threshold is %f %p_thr,\
                                     maybe you need to reset a lower p_threshold')
@@ -665,7 +673,8 @@ def clu2STC(fn_list, p_thre=0.05):
         fsave_vertices = list(npz['fsave_vertices'])
         tstep = npz['tstep'].flatten()[0]
         stc_all_cluster_vis = summarize_clusters_stc(clu, p_thre, tstep=tstep,
-                                                    vertices=fsave_vertices,
+                                                    vertices=fsave_vertices, 
                                                     subject='fsaverage')
-    
+        #import pdb
+        #pdb.set_trace()
         stc_all_cluster_vis.save(fn_stc_out)
