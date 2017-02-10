@@ -13,10 +13,11 @@ do_make_inve = False # Generate inverse operator
 do_inver_ave = False # make STC
 do_morph_STC = False # Morph individual STC
 do_group_STC = False # Group morphed STC into pre and post-stimuls (events)
-do_t_test = False # Spatial clustering
+do_t_test = True # Spatial clustering
 do_2sample = False #2 sample test
 do_clu2STC = True# Transfer cluster arrays into STC objects.
 ex_medial = False # Take the medial wall vertices into cluster estimation
+
 #The main path for ROI definition
 subjects_dir = os.environ['SUBJECTS_DIR']+'/'
 
@@ -31,6 +32,7 @@ n_jobs = 2
 mt = 1 #max_step for spatio-temporal clustering
 permutation = 1000   # testing only
 pct = 99.99 # The percentile of baseline STCs distributions
+min_duration = 20
 pthr = 0.0000001 #f-threshold
 if method == 'dSPM':
     thr = 5.67#Threshold corresponding 0.0001 interval
@@ -108,7 +110,8 @@ if do_t_test:
     else:
         del_vers = None
         
-    sample1_clus(fn_list[:1], n_per=permutation, pct=pct, p=p_v, tail=tail, del_vers=del_vers, n_jobs=n_jobs)
+    sample1_clus(fn_list[:1], n_per=permutation, pct=pct, p=p_v, tail=tail, 
+                del_vers=del_vers, min_duration=min_duration, n_jobs=n_jobs)
     #sample1_clus_thr(fn_list[:1], n_per=permutation, pthr=pthr, p=p_v, tail=tail, del_vers=del_vers, n_jobs=n_jobs)
     #sample1_clus_fixed(fn_list, n_per=permutation, thre=thr, p=p_v, tail=tail, max_step=mt, del_vers=del_vers, n_jobs=n_jobs)
     print '>>> FINISHED with the clusters generation.'
@@ -142,7 +145,7 @@ if do_clu2STC:
     print '>>> Transfer cluster to STC ....'
     from stat_cluster import clu2STC
     #fn_list = glob.glob(stcs_path + 'clu2sample_Group_*_%d_%dtail_pthr%.7f.npz' %(permutation/2, 1+(tail==0), pthr))
-    fn_list = glob.glob(stcs_path + 'clu1sample_Group_*_%d_%dtail_pct%.2f.npz' %(permutation, 1+(tail==0), pct))
+    fn_list = glob.glob(stcs_path + 'clu1sample_Group_*_%d_%dtail_pct%.3f.npz' %(permutation, 1+(tail==0), pct))
     fn_list = sorted(fn_list)
     clu2STC(fn_list, p_thre=p_v)
     

@@ -505,7 +505,7 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
     return cluster_p_values
 
 
-def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  min_duration, del_vers=None, n_jobs=1):
+def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  min_duration=20, del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 1sample ttest.
 
@@ -519,9 +519,10 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  min_duration, del
         The percentile of the baseline distribution.
       p: float
         The corrected p_values for comparisons.
-      tail: 1 or 0
-        if tail=1, that is 1 tail test
-        if tail=0, that is 2 tail test 
+      tail: 0 or 1.
+        0 stands for 2-tailed test, 1 stands for 1-tailed test.
+      min_duration: int or float.
+        The minimum duration of significant clusters (ms).
       del_vers: None or _exclu_vers
         If is '_exclu_vers', delete the vertices in the medial wall.
     '''
@@ -586,7 +587,8 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  min_duration, del
 
 
 
-def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, n_jobs=1):
+def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, min_duration=20, 
+                 del_vers=None, n_jobs=1):
     '''
       Calculate significant clusters using 2 sample ftest.
 
@@ -600,6 +602,10 @@ def sample2_clus(fn_list, n_per=8192, pthr=0.01, p=0.05, tail=0, del_vers=None, 
         The percentile of the baseline distribution.
       p: float
         The corrected p_values for comparisons.
+      tail: 0 or 1.
+        0 stands for 2-tailed test, 1 stands for 1-tailed test.
+      min_duration: int or float.
+        The minimum duration of significant clusters (ms).
       del_vers: None or _exclu_vers
         If is '_exclu_vers', delete the vertices in the medial wall.
     '''
