@@ -456,7 +456,6 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh,
             stats_max_alltimes = stats.max(axis=1)
             ix_tmax = stats_max_alltimes.argmax()
             time_max = times[idx_time[ix_tmax]]
-
             # Group averaged signal data
             if np.any(data):
                 sigpow = data[:, idx_space]
@@ -566,8 +565,8 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  del_vers=None, n_
         name = os.path.basename(fn_npz).split('_')[-1]
         cond = name[:name.rfind('.npz')]
         fn_out = fn_npz[:fn_npz.rfind('.npz')] + ',1sample,clus_info.txt'
-
-        info = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, data=X, label=cond,
+        data = np.abs(X.mean(axis=0))
+        info = cluster_info(T_obs, clusters, cluster_p_values, t_threshold, data=data, label=cond,
                             times=times, p_accept=0.01, fnout=fn_out)
 
 
