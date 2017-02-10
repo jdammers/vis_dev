@@ -446,10 +446,6 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
             sig_tstart = times_sig[ix_t1]  # in ms
             sig_tend = times_sig[ix_t2]  # in ms
             sig_duration = (ix_t2 - ix_t1) * t_step  # in ms
-            
-            if sig_duration < min_duration:
-                print sig_duration
-                cluster_p_values[clu_idx] = 1
                 
             # sig. stat. values (t- or F stat) over space and time
             stats = T_obs[:, idx_space]
@@ -481,6 +477,10 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh, min_duration,
             txt.append('number of values           with p<%0.2f:  %d\n' % (p_accept, nsig_val))
             txt.append('time window of sig. values [ms]: tmin = %d, tmax= %d\n' % (sig_tstart, sig_tend))
             txt.append('      duration of cluster activity [ms]: duration = %d\n' % sig_duration)
+            if sig_duration < min_duration:
+                print sig_duration
+                cluster_p_values[clu_idx] = 1
+                txt.append('      Since its duration lower than %dms, it is rejected' % min_duration)
             txt.append('T/F-values in cluster:\n')
             txt.append('   min = %0.2f\n' % stats_min)
             txt.append('   max = %0.2f\n' % stats_max)
@@ -576,7 +576,7 @@ def sample1_clus(fn_list, n_per=8192, pct=99, p=0.01, tail=1,  min_duration=20, 
 
         
         good_cluster_inds = np.where(cluster_pvalues < p)[0]
-        print 'the amount of significant clusters and duration larger than %d ms are: %d' %(min_duration, good_cluster_inds.shape)
+        print 'the amount of significant clusters and duration larger than %d ms are: %d' %(min_duration, good_cluster_inds.shape[0])
         clu = list(clu)
         clu[2] = cluster_pvalues
         clu = tuple(clu)
