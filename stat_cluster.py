@@ -487,7 +487,7 @@ def cluster_info(T_obs, clusters, cluster_p_values, clu_thresh,
                 txt.append('   min = %f\n' % sigpow_min)
                 txt.append('   max = %f\n' % sigpow_max)
                 txt.append('   mean = %f\n' % sigpow_mean)
-                txt.append('Data values in cluster over at tmax:\n')
+                txt.append('Data values in cluster at tmax:\n')
                 txt.append('   min = %f\n' % sigpow_min_tmax)
                 txt.append('   max = %f\n' % sigpow_max_tmax)
                 txt.append('   mean = %f\n' % sigpow_mean_tmax)
