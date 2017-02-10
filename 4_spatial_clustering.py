@@ -32,7 +32,7 @@ n_jobs = 2
 mt = 1 #max_step for spatio-temporal clustering
 permutation = 1000   # testing only
 pct = 99.99 # The percentile of baseline STCs distributions
-min_duration = 20
+min_duration = 20# The minimum duration of the significant clusters
 pthr = 0.0000001 #f-threshold
 if method == 'dSPM':
     thr = 5.67#Threshold corresponding 0.0001 interval
